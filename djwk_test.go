@@ -2,8 +2,6 @@ package main
 
 import (
 	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -145,7 +143,6 @@ func TestMakeJWT(t *testing.T) {
 
 	for _, tc := range []struct {
 		test string
-		kid  string
 		form url.Values
 		opts Options
 	}{
@@ -155,12 +152,18 @@ func TestMakeJWT(t *testing.T) {
 			opts: Options{ExpireAfter: time.Hour * 24},
 		},
 		{
-			test: "customized",
+			test: "kid_in_form",
+			form: url.Values{"username": []string{"hello"}, "kid": []string{"b"}},
+			opts: Options{ExpireAfter: time.Hour * 24, Kids: []string{"a", "b"}},
+		},
+		{
+			test: "kid_in_options",
 			form: url.Values{"username": []string{"❤️ & 🚀"}},
 			opts: Options{
 				Issuer:      "test",
 				Audience:    "everyone",
 				ExpireAfter: time.Hour,
+				Kids:        []string{"kiddo"},
 			},
 		},
 	} {
@@ -169,16 +172,26 @@ func TestMakeJWT(t *testing.T) {
 			a := assert.New(t)
 			r := require.New(t)
 
-			// Create a key.
-			priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-			r.NoError(err)
-			key, err := jwkset.NewJWKFromKey(priv, jwkset.JWKOptions{})
+			// Create a keyset and get a private key.
+			set, err := keyset(&tc.opts)
 			r.NoError(err)
 
-			str, err := makeJWT(tc.form, tc.kid, key, &tc.opts)
+			// Make the JWT.
+			str, err := makeJWT(t.Context(), &tc.opts, set, tc.form)
 			r.NoError(err)
 			a.NotEmpty(str)
 
+			// Get the private key.
+			kid := tc.form.Get("kid")
+			if kid == "" {
+				kid = tc.opts.Kids[0]
+			}
+			key, err := set.KeyRead(t.Context(), kid)
+			r.NoError(err)
+			priv, ok := key.Key().(*ecdsa.PrivateKey)
+			a.True(ok)
+
+			// Validate the token.
 			tok, err := jwt.Parse(str, func(t *jwt.Token) (any, error) {
 				return &priv.PublicKey, nil
 			})
@@ -186,7 +199,7 @@ func TestMakeJWT(t *testing.T) {
 			a.NotNil(tok)
 
 			// KID should be set.
-			a.Equal(tc.kid, tok.Header[jwkset.HeaderKID])
+			a.Equal(kid, tok.Header[jwkset.HeaderKID])
 
 			// Compare claims;
 			str, err = tok.Claims.GetIssuer()

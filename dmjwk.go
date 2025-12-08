@@ -149,6 +149,35 @@ type accessResponse struct {
 	Scope     string `json:"scope"`
 }
 
+func newResponse(opts *Options, tok string, form url.Values) *accessResponse {
+	body := accessResponse{
+		Token:     tok,
+		Type:      tokenType,
+		ExpiresIn: int64(opts.ExpireAfter / time.Second),
+		Scope:     form.Get("scope"),
+	}
+
+	if body.Scope == "" {
+		// https://oauth.net/2/scope/
+		body.Scope = "read"
+	}
+	return &body
+}
+
+/*
+* 	grant_type
+*	username
+*	password
+* 	kid
+*	scope
+*	issuer
+*	audience
+ */
+
+// https://datatracker.ietf.org/doc/html/rfc6750#section-6.1.1
+// https://datatracker.ietf.org/doc/html/rfc6750#section-4
+const tokenType = "Bearer"
+
 func setupAuth(opts *Options, set *jwkset.MemoryJWKSet) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// https://datatracker.ietf.org/doc/html/rfc6749#section-4.3
@@ -159,38 +188,15 @@ func setupAuth(opts *Options, set *jwkset.MemoryJWKSet) http.Handler {
 			return
 		}
 
-		// Determine which key to use.
-		var kid string
-		if r.Form.Has("kid") {
-			kid = r.Form.Get("kid")
-		} else {
-			kid = opts.Kids[0]
-		}
-		key, err := set.KeyRead(r.Context(), kid)
-		if err != nil {
-			sendErr(w, r, "invalid_request", err.Error())
-			return
-		}
-
 		// Generate JWT.
-		tok, err := makeJWT(r.Form, kid, key, opts)
+		tok, err := makeJWT(r.Context(), opts, set, r.Form)
 		if err != nil {
 			sendErr(w, r, "invalid_request", err.Error())
 			return
 		}
 
 		// Assemble response body.
-		body := accessResponse{
-			Token:     tok,
-			Type:      "access",
-			ExpiresIn: int64(opts.ExpireAfter / time.Second),
-			Scope:     r.Form.Get("scope"),
-		}
-
-		if body.Scope == "" {
-			// https://oauth.net/2/scope/
-			body.Scope = "read"
-		}
+		body := newResponse(opts, tok, r.Form)
 
 		// Send the response.
 		w.Header().Set("Cache-Control", "no-store")
@@ -252,7 +258,7 @@ func checkRequest(w http.ResponseWriter, r *http.Request) bool {
 }
 
 func sendErr(w http.ResponseWriter, r *http.Request, code, msg string) bool {
-	// https://www.rfc-editor.org/rfc/rfc6749.html#section-4.1.2.1
+	// https://datatracker.ietf.org/doc/html/rfc6749#section-4.1.2.1
 	_, err := fmt.Fprintf(w, `{"error": %q, "error_description": %q}`, code, msg)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "cannot write response", "error", err)
@@ -260,16 +266,33 @@ func sendErr(w http.ResponseWriter, r *http.Request, code, msg string) bool {
 	return false
 }
 
-func makeJWT(form url.Values, kid string, key jwkset.JWK, opts *Options) (string, error) {
+func makeJWT(ctx context.Context, opts *Options, set *jwkset.MemoryJWKSet, form url.Values) (string, error) {
+	// Determine which key to use.
+	var kid string
+	if form.Has("kid") {
+		kid = form.Get("kid")
+	} else {
+		kid = opts.Kids[0]
+	}
+	key, err := set.KeyRead(ctx, kid)
+	if err != nil {
+		return "", err
+	}
+
 	now := time.Now()
 	claims := &jwt.RegisteredClaims{
-		Issuer:    opts.Issuer,
+		Issuer:    form.Get("issuer"),
 		Subject:   form.Get("username"),
 		IssuedAt:  jwt.NewNumericDate(now),
 		ExpiresAt: jwt.NewNumericDate(now.Add(opts.ExpireAfter)),
 		ID:        randID(),
 	}
-	if opts.Audience != "" {
+	if claims.Issuer == "" {
+		claims.Issuer = opts.Issuer
+	}
+	if form["audience"] != nil {
+		claims.Audience = jwt.ClaimStrings(form["audience"])
+	} else if opts.Audience != "" {
 		claims.Audience = jwt.ClaimStrings{opts.Audience}
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
