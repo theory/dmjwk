@@ -152,6 +152,20 @@ func TestMakeJWT(t *testing.T) {
 			opts: Options{ExpireAfter: time.Hour * 24},
 		},
 		{
+			test: "iss_and_aud",
+			form: url.Values{"username": []string{"theory"}},
+			opts: Options{ExpireAfter: time.Hour, Issuer: "me", Audience: "people"},
+		},
+		{
+			test: "form_iss_and_aud",
+			form: url.Values{
+				"username": []string{"theory"},
+				"iss":      []string{"authority"},
+				"aud":      []string{"pancakes"},
+			},
+			opts: Options{ExpireAfter: time.Hour},
+		},
+		{
 			test: "kid_in_form",
 			form: url.Values{"username": []string{"hello"}, "kid": []string{"b"}},
 			opts: Options{ExpireAfter: time.Hour * 24, Kids: []string{"a", "b"}},
@@ -166,13 +180,18 @@ func TestMakeJWT(t *testing.T) {
 				Kids:        []string{"kiddo"},
 			},
 		},
+		{
+			test: "no_expiration",
+			form: url.Values{"username": []string{"hello"}, "kid": []string{"b"}},
+			opts: Options{Kids: []string{"a", "b"}},
+		},
 	} {
 		t.Run(tc.test, func(t *testing.T) {
 			t.Parallel()
 			a := assert.New(t)
 			r := require.New(t)
 
-			// Create a keyset and get a private key.
+			// Create a keyset.
 			set, err := keyset(&tc.opts)
 			r.NoError(err)
 
@@ -182,14 +201,7 @@ func TestMakeJWT(t *testing.T) {
 			a.NotEmpty(str)
 
 			// Get the private key.
-			kid := tc.form.Get("kid")
-			if kid == "" {
-				kid = tc.opts.Kids[0]
-			}
-			key, err := set.KeyRead(t.Context(), kid)
-			r.NoError(err)
-			priv, ok := key.Key().(*ecdsa.PrivateKey)
-			a.True(ok)
+			kid, priv := getKey(t, set, &tc.opts, tc.form)
 
 			// Validate the token.
 			tok, err := jwt.Parse(str, func(t *jwt.Token) (any, error) {
@@ -204,7 +216,11 @@ func TestMakeJWT(t *testing.T) {
 			// Compare claims;
 			str, err = tok.Claims.GetIssuer()
 			r.NoError(err)
-			a.Equal(tc.opts.Issuer, str)
+			if iss, ok := tc.form["iss"]; ok {
+				a.Equal(iss[0], str)
+			} else {
+				a.Equal(tc.opts.Issuer, str)
+			}
 
 			str, err = tok.Claims.GetSubject()
 			r.NoError(err)
@@ -216,14 +232,20 @@ func TestMakeJWT(t *testing.T) {
 
 			exp, err := tok.Claims.GetExpirationTime()
 			r.NoError(err)
-			a.Equal(iat.Add(tc.opts.ExpireAfter), exp.Time)
+			if tc.opts.ExpireAfter > 0 {
+				a.Equal(iat.Add(tc.opts.ExpireAfter), exp.Time)
+			} else {
+				a.Nil(exp)
+			}
 
 			aud, err := tok.Claims.GetAudience()
 			r.NoError(err)
-			if tc.opts.Audience == "" {
-				a.Nil(aud)
-			} else {
+			if param, ok := tc.form["aud"]; ok {
+				a.Equal(jwt.ClaimStrings{param[0]}, aud)
+			} else if tc.opts.Audience != "" {
 				a.Equal(jwt.ClaimStrings{tc.opts.Audience}, aud)
+			} else {
+				a.Nil(aud)
 			}
 		})
 	}
@@ -283,6 +305,8 @@ func TestSendErr(t *testing.T) {
 }
 
 func TestCheckRequest(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		test string
 		form url.Values
@@ -365,14 +389,16 @@ func TestCheckRequest(t *testing.T) {
 			a := assert.New(t)
 			r := require.New(t)
 
+			// Setup a test request.
 			req := httptest.NewRequestWithContext(
 				t.Context(), http.MethodPost, "/",
 				strings.NewReader(tc.form.Encode()),
 			)
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			w := httptest.NewRecorder()
-			ok := checkRequest(w, req)
 
+			// Execute checkRequest.
+			ok := checkRequest(w, req)
 			resp := w.Result()
 			body, err := io.ReadAll(resp.Body)
 			r.NoError(err)
@@ -385,7 +411,7 @@ func TestCheckRequest(t *testing.T) {
 				return
 			}
 
-			// Should hav error response.
+			// Should have error response.
 			a.Equal(http.StatusBadRequest, resp.StatusCode)
 			// Build expected response body.
 			exp, err := json.Marshal(map[string]string{
@@ -396,4 +422,160 @@ func TestCheckRequest(t *testing.T) {
 			a.JSONEq(string(exp), string(body))
 		})
 	}
+}
+
+func TestCheckRequestParseFail(t *testing.T) {
+	t.Parallel()
+	a := assert.New(t)
+	r := require.New(t)
+
+	// Setup a request with invalid x-www-form-urlencoded
+	req := httptest.NewRequestWithContext(
+		t.Context(), http.MethodPost, "/", nil,
+	)
+	req.Header.Set("Content-Type", "invalid media type")
+	w := httptest.NewRecorder()
+
+	// Make the request.
+	ok := checkRequest(w, req)
+	a.False(ok)
+	resp := w.Result()
+	body, err := io.ReadAll(resp.Body)
+	r.NoError(err)
+
+	// Should have error response.
+	a.Equal(http.StatusBadRequest, resp.StatusCode)
+	// Build expected response body.
+	exp, err := json.Marshal(map[string]string{
+		"error":             "invalid_request",
+		"error_description": "mime: expected slash after first token",
+	})
+	r.NoError(err)
+	a.JSONEq(string(exp), string(body))
+}
+
+func TestSetupAuth(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		test string
+		opts Options
+		form url.Values
+		code string
+		msg  string
+	}{
+		{
+			test: "no_grant_type",
+			code: "invalid_request",
+			msg:  "missing grant_type",
+		},
+		{
+			test: "unknown_kid",
+			form: url.Values{
+				"grant_type": []string{"password"},
+				"username":   []string{"theory"},
+				"password":   []string{"dGhlb3J5"},
+				"kid":        []string{"nonesuch"},
+			},
+			code: "invalid_request",
+			msg:  `key not found: kid "nonesuch"`,
+		},
+		{
+			test: "success",
+			opts: Options{ExpireAfter: time.Hour},
+			form: url.Values{
+				"grant_type": []string{"password"},
+				"username":   []string{"theory"},
+				"password":   []string{"dGhlb3J5"},
+			},
+		},
+		{
+			test: "success_with_scope",
+			form: url.Values{
+				"grant_type": []string{"password"},
+				"username":   []string{"theory"},
+				"password":   []string{"dGhlb3J5"},
+				"scope":      []string{"all the things"},
+			},
+		},
+	} {
+		t.Run(tc.test, func(t *testing.T) {
+			t.Parallel()
+			a := assert.New(t)
+			r := require.New(t)
+
+			// Create a keyset.
+			set, err := keyset(&tc.opts)
+			r.NoError(err)
+
+			// Create the handler.
+			handler := setupAuth(&tc.opts, set)
+
+			// Setup a test request.
+			req := httptest.NewRequestWithContext(
+				t.Context(), http.MethodPost, "/",
+				strings.NewReader(tc.form.Encode()),
+			)
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			w := httptest.NewRecorder()
+
+			// Execute checkRequest.
+			handler.ServeHTTP(w, req)
+			resp := w.Result()
+			r.NoError(err)
+			a.Equal(resp.Header.Get("Content-Type"), "application/json")
+
+			if tc.code != "" {
+				// Should return an error.
+				a.Equal(http.StatusBadRequest, resp.StatusCode)
+				// Build expected response body.
+				exp, err := json.Marshal(map[string]string{
+					"error":             tc.code,
+					"error_description": tc.msg,
+				})
+				r.NoError(err)
+				body, err := io.ReadAll(resp.Body)
+				a.JSONEq(string(exp), string(body))
+				return
+			}
+
+			// Parse the response.
+			res := map[string]any{}
+			r.NoError(json.NewDecoder(w.Body).Decode(&res))
+
+			// Get the signing key.
+			kid, priv := getKey(t, set, &tc.opts, tc.form)
+
+			// Verify the token.
+			str, ok := res["access_token"].(string)
+			a.True(ok)
+			tok, err := jwt.Parse(str, func(t *jwt.Token) (any, error) {
+				return &priv.PublicKey, nil
+			})
+			r.NoError(err)
+			a.NotNil(tok)
+			a.Equal(kid, tok.Header[jwkset.HeaderKID])
+
+			// Verify the rest of the response.
+			a.Equal("Bearer", res["token_type"])
+			if tc.opts.ExpireAfter > 0 {
+				a.Equal(float64(tc.opts.ExpireAfter/time.Second), res["expires_in"])
+			} else {
+				_, ok = res["expires_in"]
+				a.False(ok)
+			}
+		})
+	}
+}
+
+func getKey(t *testing.T, set *jwkset.MemoryJWKSet, opts *Options, form url.Values) (string, *ecdsa.PrivateKey) {
+	kid := form.Get("kid")
+	if kid == "" {
+		kid = opts.Kids[0]
+	}
+	key, err := set.KeyRead(t.Context(), kid)
+	require.NoError(t, err)
+	priv, ok := key.Key().(*ecdsa.PrivateKey)
+	assert.True(t, ok)
+	return kid, priv
 }

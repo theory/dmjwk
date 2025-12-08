@@ -170,8 +170,8 @@ func newResponse(opts *Options, tok string, form url.Values) *accessResponse {
 *	password
 * 	kid
 *	scope
-*	issuer
-*	audience
+*	iss
+*	aud
  */
 
 // https://datatracker.ietf.org/doc/html/rfc6750#section-6.1.1
@@ -189,14 +189,15 @@ func setupAuth(opts *Options, set *jwkset.MemoryJWKSet) http.Handler {
 		}
 
 		// Generate JWT.
-		tok, err := makeJWT(r.Context(), opts, set, r.Form)
+		tok, err := makeJWT(r.Context(), opts, set, r.PostForm)
 		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
 			sendErr(w, r, "invalid_request", err.Error())
 			return
 		}
 
 		// Assemble response body.
-		body := newResponse(opts, tok, r.Form)
+		body := newResponse(opts, tok, r.PostForm)
 
 		// Send the response.
 		w.Header().Set("Cache-Control", "no-store")
@@ -281,17 +282,19 @@ func makeJWT(ctx context.Context, opts *Options, set *jwkset.MemoryJWKSet, form 
 
 	now := time.Now()
 	claims := &jwt.RegisteredClaims{
-		Issuer:    form.Get("issuer"),
-		Subject:   form.Get("username"),
-		IssuedAt:  jwt.NewNumericDate(now),
-		ExpiresAt: jwt.NewNumericDate(now.Add(opts.ExpireAfter)),
-		ID:        randID(),
+		Issuer:   form.Get("iss"),
+		Subject:  form.Get("username"),
+		IssuedAt: jwt.NewNumericDate(now),
+		ID:       randID(),
+	}
+	if opts.ExpireAfter > 0 {
+		claims.ExpiresAt = jwt.NewNumericDate(now.Add(opts.ExpireAfter))
 	}
 	if claims.Issuer == "" {
 		claims.Issuer = opts.Issuer
 	}
-	if form["audience"] != nil {
-		claims.Audience = jwt.ClaimStrings(form["audience"])
+	if form["aud"] != nil {
+		claims.Audience = jwt.ClaimStrings(form["aud"])
 	} else if opts.Audience != "" {
 		claims.Audience = jwt.ClaimStrings{opts.Audience}
 	}
