@@ -567,7 +567,6 @@ func TestSetupAuth(t *testing.T) {
 		})
 	}
 }
-
 func getKey(t *testing.T, set *jwkset.MemoryJWKSet, opts *Options, form url.Values) (string, *ecdsa.PrivateKey) {
 	kid := form.Get("kid")
 	if kid == "" {

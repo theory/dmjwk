@@ -5,7 +5,6 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/tls"
 	"encoding/base32"
 	"encoding/base64"
 	"encoding/binary"
@@ -18,7 +17,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 
@@ -93,28 +91,20 @@ func keyset(opts *Options) (*jwkset.MemoryJWKSet, error) {
 }
 
 func server(opts *Options, set *jwkset.MemoryJWKSet) (*http.Server, error) {
-	cert, err := tls.LoadX509KeyPair(
-		filepath.Clean(opts.CertPath),
-		filepath.Clean(opts.KeyPath),
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	mux, err := newMux(opts, set)
 	if err != nil {
 		return nil, err
 	}
 
+	tls, err := tlsConfig(opts)
+	if err != nil {
+		return nil, err
+	}
 	return &http.Server{
-		Addr:    fmt.Sprintf(":%v", opts.Port),
-		Handler: mux,
-		TLSConfig: &tls.Config{
-			MinVersion:   tls.VersionTLS12,
-			Certificates: []tls.Certificate{cert},
-		},
+		Addr:      fmt.Sprintf(":%v", opts.Port),
+		Handler:   mux,
+		TLSConfig: tls,
 	}, nil
-
 }
 
 func newMux(opts *Options, set *jwkset.MemoryJWKSet) (*http.ServeMux, error) {
