@@ -156,7 +156,7 @@ func selfSigned() (*TLSBundle, error) {
 		Bytes: certBytes,
 	})
 
-	// PEM-encode the key.
+	// Create and PEM-encode the key.
 	x509Bytes, err := x509.MarshalECPrivateKey(certPrivKey)
 	if err != nil {
 		return nil, err

@@ -73,52 +73,57 @@ func TestMux(t *testing.T) {
 	for _, tc := range []struct {
 		test string
 		opts Options
-		err  string
+		form url.Values
+		code string
+		msg  string
 	}{
 		{
-			test: "no_kids",
+			test: "no_grant_type",
 			opts: Options{},
+			code: "invalid_request",
+			msg:  "missing grant_type",
 		},
 		{
-			test: "one_kid",
+			test: "success",
 			opts: Options{Kids: []string{"hello"}},
+			form: url.Values{
+				"grant_type": []string{"password"},
+				"username":   []string{"theory"},
+				"password":   []string{"dGhlb3J5"},
+			},
 		},
 		{
-			test: "multiple_kids",
+			test: "multiple_kids_success",
 			opts: Options{Kids: []string{"a", "b", "😀"}},
+			form: url.Values{
+				"grant_type": []string{"password"},
+				"username":   []string{"bagel"},
+				"password":   []string{"YmFnZWw"},
+			},
 		},
 	} {
 		t.Run(tc.test, func(t *testing.T) {
 			t.Parallel()
-			a := assert.New(t)
 			r := require.New(t)
 
 			// Create a keyset and get the public JWK set.
 			set, err := keyset(&tc.opts)
 			r.NoError(err)
-			pub, err := set.JSONPublic(t.Context())
-			r.NoError(err)
-
-			mux, err := newMux(&tc.opts, set)
-			if tc.err != "" {
-				a.Nil(set)
-				r.EqualError(err, tc.err)
-				return
-			}
 
 			// Test fetching the JWKs.
-			req := httptest.NewRequestWithContext(
-				t.Context(), http.MethodGet, "/.well-known/jwks.json", nil,
-			)
-			w := httptest.NewRecorder()
-			mux.ServeHTTP(w, req)
+			mux, err := newMux(&tc.opts, set)
+			makeJWKsRequest(t, mux, set)
 
-			resp := w.Result()
-			a.Equal(http.StatusOK, resp.StatusCode)
-			a.Equal(resp.Header.Get("Content-Type"), "application/json")
-			body, err := io.ReadAll(resp.Body)
-			r.NoError(err)
-			a.JSONEq(string(pub), string(body))
+			// Test authentication.
+			makeAuthRequest(t, authTest{
+				handler: mux,
+				opts:    &tc.opts,
+				set:     set,
+				form:    tc.form,
+				code:    tc.code,
+				msg:     tc.msg,
+			})
+
 		})
 	}
 }
@@ -501,72 +506,90 @@ func TestSetupAuth(t *testing.T) {
 	} {
 		t.Run(tc.test, func(t *testing.T) {
 			t.Parallel()
-			a := assert.New(t)
+
+			// Create a keyset.
+			set, err := keyset(&tc.opts)
+			require.NoError(t, err)
+
+			// Test the request.
+			makeAuthRequest(t, authTest{
+				handler: setupAuth(&tc.opts, set),
+				opts:    &tc.opts,
+				set:     set,
+				form:    tc.form,
+				code:    tc.code,
+				msg:     tc.msg,
+			})
+		})
+	}
+}
+
+func TestServer(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+
+	for _, tc := range []struct {
+		test string
+		opts Options
+		form url.Values
+		code string
+		msg  string
+		err  string
+	}{
+		{
+			test: "missing_cert_file",
+			opts: Options{ConfigDir: tmp, KeyPath: "nonesuch"},
+			err:  "read",
+		},
+		{
+			test: "no_grant_type",
+			opts: Options{},
+			code: "invalid_request",
+			msg:  "missing grant_type",
+		},
+		{
+			test: "success",
+			opts: Options{},
+			form: url.Values{
+				"grant_type": []string{"password"},
+				"username":   []string{"theory"},
+				"password":   []string{"dGhlb3J5"},
+			},
+		},
+	} {
+		t.Run(tc.test, func(t *testing.T) {
+			t.Parallel()
 			r := require.New(t)
 
 			// Create a keyset.
 			set, err := keyset(&tc.opts)
 			r.NoError(err)
 
-			// Create the handler.
-			handler := setupAuth(&tc.opts, set)
-
-			// Setup a test request.
-			req := httptest.NewRequestWithContext(
-				t.Context(), http.MethodPost, "/",
-				strings.NewReader(tc.form.Encode()),
-			)
-			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-			w := httptest.NewRecorder()
-
-			// Execute checkRequest.
-			handler.ServeHTTP(w, req)
-			resp := w.Result()
-			r.NoError(err)
-			a.Equal(resp.Header.Get("Content-Type"), "application/json")
-
-			if tc.code != "" {
-				// Should return an error.
-				a.Equal(http.StatusBadRequest, resp.StatusCode)
-				// Build expected response body.
-				exp, err := json.Marshal(map[string]string{
-					"error":             tc.code,
-					"error_description": tc.msg,
-				})
-				r.NoError(err)
-				body, err := io.ReadAll(resp.Body)
-				a.JSONEq(string(exp), string(body))
+			// Create a server.
+			srv, err := server(&tc.opts, set)
+			if tc.err != "" {
+				r.ErrorContains(err, tc.err)
 				return
 			}
 
-			// Parse the response.
-			res := map[string]any{}
-			r.NoError(json.NewDecoder(w.Body).Decode(&res))
+			require.NoError(t, err)
 
-			// Get the signing key.
-			kid, priv := getKey(t, set, &tc.opts, tc.form)
+			// Test fetching the JWKs.
+			makeJWKsRequest(t, srv.Handler, set)
 
-			// Verify the token.
-			str, ok := res["access_token"].(string)
-			a.True(ok)
-			tok, err := jwt.Parse(str, func(t *jwt.Token) (any, error) {
-				return &priv.PublicKey, nil
+			// Test the an auth request.
+			makeAuthRequest(t, authTest{
+				handler: srv.Handler,
+				opts:    &tc.opts,
+				set:     set,
+				form:    tc.form,
+				code:    tc.code,
+				msg:     tc.msg,
 			})
-			r.NoError(err)
-			a.NotNil(tok)
-			a.Equal(kid, tok.Header[jwkset.HeaderKID])
-
-			// Verify the rest of the response.
-			a.Equal("Bearer", res["token_type"])
-			if tc.opts.ExpireAfter > 0 {
-				a.Equal(float64(tc.opts.ExpireAfter/time.Second), res["expires_in"])
-			} else {
-				_, ok = res["expires_in"]
-				a.False(ok)
-			}
 		})
 	}
 }
+
 func getKey(t *testing.T, set *jwkset.MemoryJWKSet, opts *Options, form url.Values) (string, *ecdsa.PrivateKey) {
 	kid := form.Get("kid")
 	if kid == "" {
@@ -577,4 +600,93 @@ func getKey(t *testing.T, set *jwkset.MemoryJWKSet, opts *Options, form url.Valu
 	priv, ok := key.Key().(*ecdsa.PrivateKey)
 	assert.True(t, ok)
 	return kid, priv
+}
+
+func makeJWKsRequest(t *testing.T, handler http.Handler, set *jwkset.MemoryJWKSet) {
+	t.Helper()
+	a := assert.New(t)
+	r := require.New(t)
+
+	pub, err := set.JSONPublic(t.Context())
+	r.NoError(err)
+
+	req := httptest.NewRequestWithContext(
+		t.Context(), http.MethodGet, "/.well-known/jwks.json", nil,
+	)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	resp := w.Result()
+	a.Equal(http.StatusOK, resp.StatusCode)
+	a.Equal(resp.Header.Get("Content-Type"), "application/json")
+	body, err := io.ReadAll(resp.Body)
+	r.NoError(err)
+	a.JSONEq(string(pub), string(body))
+}
+
+type authTest struct {
+	handler http.Handler
+	opts    *Options
+	set     *jwkset.MemoryJWKSet
+	form    url.Values
+	code    string
+	msg     string
+}
+
+func makeAuthRequest(t *testing.T, tc authTest) {
+	t.Helper()
+	a := assert.New(t)
+	r := require.New(t)
+
+	// Setup a test request.
+	req := httptest.NewRequestWithContext(
+		t.Context(), http.MethodPost, "/authorization",
+		strings.NewReader(tc.form.Encode()),
+	)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	tc.handler.ServeHTTP(w, req)
+	resp := w.Result()
+	a.Equal(resp.Header.Get("Content-Type"), "application/json")
+
+	if tc.code != "" {
+		// Should return an error.
+		a.Equal(http.StatusBadRequest, resp.StatusCode)
+		// Build expected response body.
+		exp, err := json.Marshal(map[string]string{
+			"error":             tc.code,
+			"error_description": tc.msg,
+		})
+		r.NoError(err)
+		body, err := io.ReadAll(resp.Body)
+		a.JSONEq(string(exp), string(body))
+		return
+	}
+
+	// Parse the response.
+	res := map[string]any{}
+	r.NoError(json.NewDecoder(w.Body).Decode(&res))
+
+	// Get the signing key.
+	kid, priv := getKey(t, tc.set, tc.opts, tc.form)
+
+	// Verify the token.
+	str, ok := res["access_token"].(string)
+	a.True(ok)
+	tok, err := jwt.Parse(str, func(t *jwt.Token) (any, error) {
+		return &priv.PublicKey, nil
+	})
+	r.NoError(err)
+	a.NotNil(tok)
+	a.Equal(kid, tok.Header[jwkset.HeaderKID])
+
+	// Verify the rest of the response.
+	a.Equal("Bearer", res["token_type"])
+	if tc.opts.ExpireAfter > 0 {
+		a.Equal(float64(tc.opts.ExpireAfter/time.Second), res["expires_in"])
+	} else {
+		_, ok = res["expires_in"]
+		a.False(ok)
+	}
 }
