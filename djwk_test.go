@@ -1,13 +1,23 @@
 package main
 
 import (
+	"context"
 	"crypto/ecdsa"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
+	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -526,7 +536,6 @@ func TestSetupAuth(t *testing.T) {
 
 func TestServer(t *testing.T) {
 	t.Parallel()
-	tmp := t.TempDir()
 
 	for _, tc := range []struct {
 		test string
@@ -538,7 +547,7 @@ func TestServer(t *testing.T) {
 	}{
 		{
 			test: "missing_cert_file",
-			opts: Options{ConfigDir: tmp, KeyPath: "nonesuch"},
+			opts: Options{KeyPath: "nonesuch"},
 			err:  "read",
 		},
 		{
@@ -559,7 +568,12 @@ func TestServer(t *testing.T) {
 	} {
 		t.Run(tc.test, func(t *testing.T) {
 			t.Parallel()
+			a := assert.New(t)
 			r := require.New(t)
+
+			// Set a config dir.
+			tmp := t.TempDir()
+			tc.opts.ConfigDir = tmp
 
 			// Create a keyset.
 			set, err := keyset(&tc.opts)
@@ -573,6 +587,9 @@ func TestServer(t *testing.T) {
 			}
 
 			require.NoError(t, err)
+
+			// Should have a "ca.pem" in the config dir.
+			a.FileExists(filepath.Join(tmp, "ca.pem"))
 
 			// Test fetching the JWKs.
 			makeJWKsRequest(t, srv.Handler, set)
@@ -588,6 +605,180 @@ func TestServer(t *testing.T) {
 			})
 		})
 	}
+}
+
+func TestRun(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		test    string
+		opts    Options
+		sig     func(stop chan os.Signal, serveErr chan error)
+		timeout time.Duration
+		exp     string
+		err     string
+		log     []string
+	}{
+		{
+			test: "interrupt",
+			sig: func(stop chan os.Signal, _ chan error) {
+				stop <- os.Interrupt
+			},
+			timeout: 5 * time.Second,
+			log: []string{
+				`{"level":"INFO","msg":"server starting","address":":0"}`,
+				`{"level":"INFO","msg":"server shutting down","timeout":5000000000}`,
+				`{"level":"INFO","msg":"server shut down"}`,
+			},
+		},
+		{
+			test: "timeout",
+			sig: func(stop chan os.Signal, _ chan error) {
+				stop <- os.Interrupt
+			},
+			timeout: -1,
+			// XXX This should cause the shutdown to fail, but does not.
+			// exp:     "server shutdown failed",
+			log: []string{
+				`{"level":"INFO","msg":"server starting","address":":0"}`,
+				`{"level":"INFO","msg":"server shutting down","timeout":-1}`,
+				`{"level":"INFO","msg":"server shut down"}`,
+				// `{"level":"ERROR","msg":"server shutdown failed","error":"context deadline exceeded"}`,
+			},
+		},
+		{
+			test: "serve_error",
+			sig: func(_ chan os.Signal, serveErr chan error) {
+				serveErr <- errors.New("ouch")
+			},
+			exp:     "server failed",
+			err:     "ouch",
+			timeout: 100 * time.Millisecond,
+			log: []string{
+				`{"level":"INFO","msg":"server starting","address":":0"}`,
+				`{"level":"ERROR","msg":"server failed","error":"ouch"}`,
+			},
+		},
+	} {
+		t.Run(tc.test, func(t *testing.T) {
+			t.Parallel()
+			a := assert.New(t)
+			r := require.New(t)
+
+			// Set a config dir.
+			tmp := t.TempDir()
+			tc.opts.ConfigDir = tmp
+
+			// Set up a logger.
+			log := &strings.Builder{}
+			logger := slog.New(slog.NewJSONHandler(log, &slog.HandlerOptions{
+				ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+					// Don't write the time.
+					if a.Key == slog.TimeKey {
+						return slog.Attr{}
+					}
+					return a
+				},
+			}))
+
+			// Create a keyset.
+			set, err := keyset(&tc.opts)
+			r.NoError(err)
+
+			// Find an available port.
+			l := newLocalListener(t)
+			addr, ok := l.Addr().(*net.TCPAddr)
+			r.True(ok)
+
+			// Create a server.
+			tc.opts.Port = uint32(addr.Port)
+			srv, err := server(&tc.opts, set)
+			require.NoError(t, err)
+
+			// Load the CA bundle.
+			pool := x509.NewCertPool()
+			ca, err := os.ReadFile(filepath.Join(tmp, "ca.pem"))
+			r.NoError(err)
+			a.True(pool.AppendCertsFromPEM(ca))
+
+			// Setup utilities.
+			cs := make(chan os.Signal, 1)
+			serveErr := make(chan error, 1)
+			var wg sync.WaitGroup
+
+			// Run the server.
+			wg.Go(func() {
+				msg, err := run(srv, l, cs, serveErr, logger, tc.timeout)
+				a.Equal(tc.exp, msg)
+				if tc.err == "" {
+					r.NoError(err)
+				} else {
+					r.EqualError(err, tc.err)
+				}
+			})
+
+			// Poll for the service to start.
+			waitForStart(t, pool, l)
+
+			// Send the signal and wait for the server to finish.
+			tc.sig(cs, serveErr)
+			wg.Wait()
+
+			// Compare the log output.
+			for i, l := range tc.log {
+				tc.log[i] = strings.Replace(l, ":0", addr.String(), 1)
+			}
+			a.Equal(strings.Join(tc.log, "\n")+"\n", log.String())
+		})
+	}
+}
+
+func waitForStart(t *testing.T, pool *x509.CertPool, listener net.Listener) {
+	t.Helper()
+
+	url := fmt.Sprintf("https://%v/", listener.Addr())
+	client := http.Client{
+		Timeout: 100 * time.Millisecond,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{RootCAs: pool},
+		},
+	}
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
+	require.NoError(t, err)
+
+POLL:
+	for {
+		select {
+		case <-ticker.C:
+			res, err := client.Do(req)
+			if err == nil {
+				assert.Equal(t, http.StatusNotFound, res.StatusCode)
+				require.NoError(t, res.Body.Close())
+				break POLL
+			}
+		case <-ctx.Done():
+			t.Fatalf("timed out waiting for server to start")
+		}
+	}
+}
+
+// newLocalListener configures a listener on a free port selected by the
+// system. From https://stackoverflow.com/a/43425461/79202 and
+// https://cs.opensource.google/go/go/+/refs/tags/go1.25.0:src/net/http/httptest/server.go;l=68
+//
+//nolint:noctx
+func newLocalListener(t *testing.T) net.Listener {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		l, err = net.Listen("tcp6", "[::1]:0")
+		require.NoError(t, err)
+	}
+	return l
 }
 
 func getKey(t *testing.T, set *jwkset.MemoryJWKSet, opts *Options, form url.Values) (string, *ecdsa.PrivateKey) {

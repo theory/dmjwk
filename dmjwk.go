@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	randy "math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -58,7 +59,10 @@ func main() {
 	srv, err := server(opts, set)
 	exitErr(err, "cannot create server")
 
-	msg, err := run(opts, srv)
+	listener, err := net.Listen("tcp", srv.Addr)
+	exitErr(err, "cannot listen on port")
+
+	msg, err := run(srv, listener, make(chan os.Signal, 1), make(chan error, 1), slog.Default(), time.Second)
 	exitErr(err, msg)
 }
 
@@ -293,17 +297,22 @@ func makeJWT(ctx context.Context, opts *Options, set *jwkset.MemoryJWKSet, form 
 	return tok.SignedString(key.Key())
 }
 
-func run(opts *Options, srv *http.Server) (string, error) {
+func run(
+	srv *http.Server,
+	listener net.Listener,
+	stop chan os.Signal,
+	serveErr chan error,
+	logger *slog.Logger,
+	timeout time.Duration,
+) (string, error) {
 	// Listen for signals. Interrupt captures ^C on all systems.
-	stop := make(chan os.Signal, 1)
-	serveErr := make(chan error, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
 	// Serve requests in a separate goroutine.
 	go func() {
-		slog.Info("server starting", "port", opts.Port)
+		logger.Info("server starting", "address", listener.Addr().String())
 		defer close(serveErr)
-		err := srv.ListenAndServeTLS("", "")
+		err := srv.ServeTLS(listener, "", "")
 		if !errors.Is(err, http.ErrServerClosed) {
 			serveErr <- err
 		}
@@ -311,21 +320,22 @@ func run(opts *Options, srv *http.Server) (string, error) {
 
 	select {
 	case <-stop:
-		const timeout = 10 * time.Second
 		// Interrupt or termination signal. Create a timeout for shutdown.
-		slog.Info("server shutting down", slog.Duration("timeout", timeout))
+		logger.Info("server shutting down", slog.Duration("timeout", timeout))
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 
 		// Shutdown with the timeout to wait for requests to finish.
 		srv.SetKeepAlivesEnabled(false)
 		if err := srv.Shutdown(ctx); err != nil {
+			logger.Error("server shutdown failed", "error", err)
 			return "server shutdown failed", err
 		}
 
-		slog.Info("server shut down")
+		logger.Info("server shut down")
 	case err := <-serveErr:
 		if err != nil {
+			logger.Error("server failed", "error", err)
 			return "server failed", err
 		}
 	}
