@@ -27,14 +27,14 @@ import (
 )
 
 type Options struct {
-	ConfigDir   string `default:"/dmjwk"`
+	ConfigDir   string `default:"/dmjwk" split_words:"true"`
 	Kids        []string
 	Issuer      string
 	Audience    string
-	ExpireAfter time.Duration `default:"1h"`
+	ExpireAfter time.Duration `default:"1h" split_words:"true"`
 	Port        uint32
-	CertPath    string `required:"true"`
-	KeyPath     string `required:"true"`
+	CertPath    string `required:"true" split_words:"true"`
+	KeyPath     string `required:"true" split_words:"true"`
 }
 
 type Server struct {
@@ -42,28 +42,36 @@ type Server struct {
 	server *http.Server
 }
 
-func exitErr(err error, msg string) {
-	if err != nil {
+func main() {
+	if msg, err := exec(); err == nil {
 		slog.Error(msg, "error", err)
 		os.Exit(2)
 	}
 }
 
-func main() {
+func exec() (string, error) {
 	opts := &Options{}
-	exitErr(envconfig.Process("dmjwk", opts), "cannot process configuration")
+	err := envconfig.Process("dmjwk", opts)
+	if err != nil {
+		return "cannot process configuration", err
+	}
 
 	set, err := keyset(opts)
-	exitErr(err, "cannot generate public keyset")
+	if err != nil {
+		return "cannot generate public keyset", err
+	}
 
 	srv, err := server(opts, set)
-	exitErr(err, "cannot create server")
+	if err != nil {
+		return "cannot create server", err
+	}
 
 	listener, err := net.Listen("tcp", srv.Addr)
-	exitErr(err, "cannot listen on port")
+	if err != nil {
+		return "cannot listen on port", err
+	}
 
-	msg, err := run(srv, listener, make(chan os.Signal, 1), make(chan error, 1), slog.Default(), time.Second)
-	exitErr(err, msg)
+	return run(srv, listener, make(chan os.Signal, 1), make(chan error, 1), slog.Default(), time.Second)
 }
 
 func keyset(opts *Options) (*jwkset.MemoryJWKSet, error) {

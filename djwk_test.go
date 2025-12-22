@@ -733,6 +733,50 @@ func TestRun(t *testing.T) {
 	}
 }
 
+func TestExec(t *testing.T) {
+	for _, tc := range []struct {
+		test string
+		env  map[string]string
+		// setup func(*testing.T, string)
+		msg string
+		err string
+	}{
+		{
+			test: "no_cert_path",
+			env:  map[string]string{"DMJWK_KEY_PATH": ""},
+			msg:  "cannot process configuration",
+			err:  "required key DMJWK_CERT_PATH missing value",
+		},
+		{
+			test: "invalid_cert_paths",
+			env:  map[string]string{"DMJWK_CERT_PATH": "nonesuch", "DMJWK_KEY_PATH": "nonesuch"},
+			msg:  "cannot create server",
+			err:  "open",
+		},
+	} {
+		t.Run(tc.test, func(t *testing.T) {
+			// Set a config dir.
+			tmp := t.TempDir()
+			t.Setenv("DMJWK_CONFIG_DIR", tmp)
+
+			// Set up environment.
+			for k, v := range tc.env {
+				t.Setenv(k, v)
+			}
+
+			// Make it so.
+			msg, err := exec()
+			if tc.msg != "" {
+				assert.Equal(t, tc.msg, msg)
+				require.ErrorContains(t, err, tc.err)
+			} else {
+				assert.Empty(t, msg)
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func waitForStart(t *testing.T, pool *x509.CertPool, listener net.Listener) {
 	t.Helper()
 
