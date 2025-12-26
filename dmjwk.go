@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 	"time"
 
@@ -34,14 +35,25 @@ var (
 )
 
 type Options struct {
-	ConfigDir   string `default:"/dmjwk" split_words:"true"`
-	Kids        []string
-	Issuer      string
-	Audience    string
-	ExpireAfter time.Duration `default:"1h" split_words:"true"`
-	Port        uint32
-	CertPath    string `required:"true" split_words:"true"`
-	KeyPath     string `required:"true" split_words:"true"`
+	ConfigDir   string        `split_words:"true" default:"/etc/dmjwk"`
+	Kids        []string      `split_words:"true"`
+	Issuer      string        `split_words:"true"`
+	Audience    string        `split_words:"true"`
+	ExpireAfter time.Duration `split_words:"true" default:"1h"`
+	Port        uint32        `split_words:"true" default:"443"`
+	CertPath    string        `split_words:"true"`
+	KeyPath     string        `split_words:"true"`
+	HostNames   []string      `split_words:"true"`
+}
+
+func (o *Options) dnsNames() []string {
+	hosts := []string{"localhost", "localhost4", "localhost6", "localhost.localdomain"}
+	for _, h := range o.HostNames {
+		if !slices.Contains(hosts, h) {
+			hosts = append(hosts, h)
+		}
+	}
+	return hosts
 }
 
 func main() {
@@ -195,13 +207,13 @@ func newResponse(opts *Options, tok string, form url.Values) *accessResponse {
 }
 
 /*
-* 	grant_type
-*	username
-*	password
-* 	kid
-*	scope
-*	iss
-*	aud
+* grant_type
+* username
+* password
+* kid
+* scope
+* iss
+* aud
  */
 
 // https://datatracker.ietf.org/doc/html/rfc6750#section-6.1.1

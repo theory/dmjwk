@@ -38,7 +38,7 @@ func tlsConfig(opts *Options) (*tls.Config, error) {
 		}
 	} else {
 		// Create a CA cert and key pair.
-		bundle, err := selfSigned()
+		bundle, err := selfSigned(opts)
 		if err != nil {
 			return nil, err
 		}
@@ -72,7 +72,7 @@ type TLSBundle struct {
 	Key []byte
 }
 
-func selfSigned() (*TLSBundle, error) {
+func selfSigned(opts *Options) (*TLSBundle, error) {
 	// Set up a subject shared by the CA and certs.
 	sub := pkix.Name{Organization: []string{"dmjwk Holdings, Inc."}}
 
@@ -121,6 +121,7 @@ func selfSigned() (*TLSBundle, error) {
 		SerialNumber: sn,
 		SubjectKeyId: []byte(randID()),
 		IPAddresses:  []net.IP{net.IPv4(local, 0, 0, 1), net.IPv6loopback},
+		DNSNames:     opts.dnsNames(),
 		NotBefore:    now,
 		NotAfter:     now.AddDate(0, 0, lifetimeDays),
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},

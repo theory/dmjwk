@@ -27,6 +27,44 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestOptions(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		test  string
+		opts  *Options
+		hosts []string
+	}{
+		{
+			test: "no_hosts",
+			opts: &Options{},
+		},
+		{
+			test: "dupe_hosts",
+			opts: &Options{
+				HostNames: []string{"x", "x", "y", "x"},
+			},
+			hosts: []string{"x", "y"},
+		},
+		{
+			test: "overlapping_hosts",
+			opts: &Options{
+				HostNames: []string{"x", "localhost", "y"},
+			},
+			hosts: []string{"x", "y"},
+		},
+	} {
+		t.Run(tc.test, func(t *testing.T) {
+			t.Parallel()
+			a := assert.New(t)
+
+			hosts := append([]string{"localhost", "localhost4", "localhost6", "localhost.localdomain"}, tc.hosts...)
+			a.Equal(hosts, tc.opts.dnsNames())
+		})
+	}
+
+}
+
 func TestKeyset(t *testing.T) {
 	t.Parallel()
 
@@ -742,10 +780,10 @@ func TestExec(t *testing.T) {
 		err  string
 	}{
 		{
-			test: "no_cert_path",
-			env:  map[string]string{"DMJWK_KEY_PATH": ""},
+			test: "invalid_option",
+			env:  map[string]string{"DMJWK_PORT": "-42"},
 			msg:  "cannot process configuration",
-			err:  "required key DMJWK_CERT_PATH missing value",
+			err:  "envconfig.Process: assigning DMJWK_PORT to Port",
 		},
 		{
 			test: "invalid_cert_paths",
@@ -757,6 +795,12 @@ func TestExec(t *testing.T) {
 			test: "version",
 			args: []string{"version"},
 			msg:  fmt.Sprintf("dmjwk version %v (%v)", version, build),
+		},
+		{
+			test: "unknown_param",
+			args: []string{"--lol"},
+			msg:  "cannot process arguments",
+			err:  "unknown argument `--lol`",
 		},
 	} {
 		t.Run(tc.test, func(t *testing.T) {

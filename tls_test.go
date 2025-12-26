@@ -20,7 +20,7 @@ func TestSelfSigned(t *testing.T) {
 	a := assert.New(t)
 	r := require.New(t)
 
-	bundle, err := selfSigned()
+	bundle, err := selfSigned(&Options{HostNames: []string{"x", "dmjwk"}})
 	r.NoError(err)
 	a.NotNil(bundle.CA)
 	a.NotNil(bundle.Cert)
@@ -29,6 +29,17 @@ func TestSelfSigned(t *testing.T) {
 	// Parse the key pair into a tls config.
 	cert, err := tls.X509KeyPair(bundle.Cert, bundle.Key)
 	r.NoError(err)
+	a.Equal(
+		[]string{
+			"localhost",
+			"localhost4",
+			"localhost6",
+			"localhost.localdomain",
+			"x",
+			"dmjwk",
+		},
+		cert.Leaf.DNSNames,
+	)
 
 	// Make sure it all works.
 	checkTLSConfig(t, bundle.CA, &tls.Config{
@@ -61,7 +72,7 @@ func TestTLSConfig(t *testing.T) {
 	checkTLSConfig(t, caBytes, cfg)
 
 	// Write out key and cert files.
-	bundle, err := selfSigned()
+	bundle, err := selfSigned(&Options{})
 	r.NoError(err)
 	keyFile := filepath.Join(tmp, "key.pem")
 	certFile := filepath.Join(tmp, "cert.pem")
