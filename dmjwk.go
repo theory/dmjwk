@@ -27,6 +27,12 @@ import (
 	"github.com/kelseyhightower/envconfig"
 )
 
+//nolint:gochecknoglobals
+var (
+	version = "development"
+	build   = "HEAD"
+)
+
 type Options struct {
 	ConfigDir   string `default:"/dmjwk" split_words:"true"`
 	Kids        []string
@@ -39,14 +45,26 @@ type Options struct {
 }
 
 func main() {
-	if msg, err := exec(); err == nil {
+	if msg, err := exec(os.Args[1:]); err != nil {
 		slog.Error(msg, "error", err)
 		const errExit = 2
 		os.Exit(errExit)
+	} else if msg != "" {
+		fmt.Fprintln(os.Stdout, msg)
 	}
 }
 
-func exec() (string, error) {
+func exec(args []string) (string, error) {
+	if len(args) > 0 {
+		switch args[0] {
+		case "version", "--version":
+			return fmt.Sprintf("dmjwk version %v (%v)", version, build), nil
+		default:
+			return "cannot process arguments",
+				fmt.Errorf("unknown argument `%v`", args[0])
+		}
+	}
+
 	opts := &Options{}
 	err := envconfig.Process("dmjwk", opts)
 	if err != nil {

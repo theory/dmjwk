@@ -1,5 +1,24 @@
-GO ?= go
+GO       ?= go
+GOOS     ?= $(word 1,$(subst /, ,$(word 4, $(shell $(GO) version))))
+GOARCH   ?= $(word 2,$(subst /, ,$(word 4, $(shell $(GO) version))))
+PLATFORM := $(GOOS)-$(GOARCH)
+VERSION  := v0.0.1-dev
 
+export VERSION GOOS GOARCH
+# https://github.com/xaionaro/documentation/blob/master/golang/reduce-binary-size.md
+# https://www.gnu.org/software/make/manual/html_node/Splitting-Lines.html
+ldflags = -ldflags="$\
+	-s -w\
+	-X 'main.version=$(VERSION)'\
+	-X 'main.build=$(shell git rev-parse --short HEAD)'$\
+"
+
+# Prevent intermediate targets from being deleted.
+# https://www.gnu.org/software/make/manual/html_node/Special-Targets.html#index-secondary-targets
+.SECONDARY:
+
+############################################################################
+# Main tasks.
 .PHONY: test # Run the unit tests
 test:
 	GOTOOLCHAIN=local $(GO) test ./... -count=1
@@ -16,7 +35,7 @@ lint: .golangci.yaml
 .PHONY: clean # Remove generated files
 clean:
 	$(GO) clean
-	@rm -rf cover.out
+	@rm -rf cover.out _build
 
 ############################################################################
 # Utilities.
@@ -32,3 +51,11 @@ debian-lint-depends:
 .git/hooks/pre-commit:
 	@printf "#!/bin/sh\nmake lint\n" > $@
 	@chmod +x $@
+
+############################################################################
+# App
+.PHONY: app # Build dmjwk
+app: _build/$(PLATFORM)/dmjwk
+
+ _build/%/dmjwk: $(filter-out %_test.go,$(shell find . -name '*.go'))
+	GOOS=$(word 1,$(subst -, ,$*)) GOARCH=$(word 2,$(subst -, ,$*)) $(GO) build $(ldflags) -o $@

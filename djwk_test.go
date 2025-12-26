@@ -737,9 +737,9 @@ func TestExec(t *testing.T) {
 	for _, tc := range []struct {
 		test string
 		env  map[string]string
-		// setup func(*testing.T, string)
-		msg string
-		err string
+		args []string
+		msg  string
+		err  string
 	}{
 		{
 			test: "no_cert_path",
@@ -753,6 +753,11 @@ func TestExec(t *testing.T) {
 			msg:  "cannot create server",
 			err:  "open",
 		},
+		{
+			test: "version",
+			args: []string{"version"},
+			msg:  fmt.Sprintf("dmjwk version %v (%v)", version, build),
+		},
 	} {
 		t.Run(tc.test, func(t *testing.T) {
 			// Set a config dir.
@@ -765,12 +770,12 @@ func TestExec(t *testing.T) {
 			}
 
 			// Make it so.
-			msg, err := exec()
-			if tc.msg != "" {
+			msg, err := exec(tc.args)
+			if tc.err != "" {
 				assert.Equal(t, tc.msg, msg)
 				require.ErrorContains(t, err, tc.err)
 			} else {
-				assert.Empty(t, msg)
+				assert.Equal(t, tc.msg, msg)
 				require.NoError(t, err)
 			}
 		})
