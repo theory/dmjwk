@@ -122,6 +122,7 @@ func TestMux(t *testing.T) {
 
 			// Test fetching the JWKs.
 			mux, err := newMux(&tc.opts, set)
+			r.NoError(err)
 			makeJWKsRequest(t, mux, set)
 
 			// Test authentication.
@@ -133,7 +134,6 @@ func TestMux(t *testing.T) {
 				code:    tc.code,
 				msg:     tc.msg,
 			})
-
 		})
 	}
 }
@@ -219,7 +219,7 @@ func TestMakeJWT(t *testing.T) {
 			kid, priv := getKey(t, set, &tc.opts, tc.form)
 
 			// Validate the token.
-			tok, err := jwt.Parse(str, func(t *jwt.Token) (any, error) {
+			tok, err := jwt.Parse(str, func(*jwt.Token) (any, error) {
 				return &priv.PublicKey, nil
 			})
 			r.NoError(err)
@@ -248,7 +248,7 @@ func TestMakeJWT(t *testing.T) {
 			exp, err := tok.Claims.GetExpirationTime()
 			r.NoError(err)
 			if tc.opts.ExpireAfter > 0 {
-				a.Equal(iat.Add(tc.opts.ExpireAfter), exp.Time)
+				a.Equal(exp.Time, iat.Add(tc.opts.ExpireAfter))
 			} else {
 				a.Nil(exp)
 			}
@@ -314,7 +314,6 @@ func TestSendErr(t *testing.T) {
 			body, err := io.ReadAll(resp.Body)
 			r.NoError(err)
 			a.JSONEq(string(exp), string(body))
-
 		})
 	}
 }
@@ -691,13 +690,14 @@ func TestRun(t *testing.T) {
 			r.True(ok)
 
 			// Create a server.
+			//nolint:gosec
 			tc.opts.Port = uint32(addr.Port)
 			srv, err := server(&tc.opts, set)
 			require.NoError(t, err)
 
 			// Load the CA bundle.
 			pool := x509.NewCertPool()
-			ca, err := os.ReadFile(filepath.Join(tmp, "ca.pem"))
+			ca, err := os.ReadFile(filepath.Clean(filepath.Join(tmp, "ca.pem")))
 			r.NoError(err)
 			a.True(pool.AppendCertsFromPEM(ca))
 
@@ -784,7 +784,7 @@ func waitForStart(t *testing.T, pool *x509.CertPool, listener net.Listener) {
 	client := http.Client{
 		Timeout: 100 * time.Millisecond,
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{RootCAs: pool},
+			TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
 		},
 	}
 	ticker := time.NewTicker(100 * time.Millisecond)
@@ -826,6 +826,8 @@ func newLocalListener(t *testing.T) net.Listener {
 }
 
 func getKey(t *testing.T, set *jwkset.MemoryJWKSet, opts *Options, form url.Values) (string, *ecdsa.PrivateKey) {
+	t.Helper()
+
 	kid := form.Get("kid")
 	if kid == "" {
 		kid = opts.Kids[0]
@@ -853,7 +855,7 @@ func makeJWKsRequest(t *testing.T, handler http.Handler, set *jwkset.MemoryJWKSe
 
 	resp := w.Result()
 	a.Equal(http.StatusOK, resp.StatusCode)
-	a.Equal(resp.Header.Get("Content-Type"), "application/json")
+	a.Equal("application/json", resp.Header.Get("Content-Type"))
 	body, err := io.ReadAll(resp.Body)
 	r.NoError(err)
 	a.JSONEq(string(pub), string(body))
@@ -883,7 +885,7 @@ func makeAuthRequest(t *testing.T, tc authTest) {
 
 	tc.handler.ServeHTTP(w, req)
 	resp := w.Result()
-	a.Equal(resp.Header.Get("Content-Type"), "application/json")
+	a.Equal("application/json", resp.Header.Get("Content-Type"))
 
 	if tc.code != "" {
 		// Should return an error.
@@ -895,6 +897,7 @@ func makeAuthRequest(t *testing.T, tc authTest) {
 		})
 		r.NoError(err)
 		body, err := io.ReadAll(resp.Body)
+		r.NoError(err)
 		a.JSONEq(string(exp), string(body))
 		return
 	}
@@ -909,7 +912,7 @@ func makeAuthRequest(t *testing.T, tc authTest) {
 	// Verify the token.
 	str, ok := res["access_token"].(string)
 	a.True(ok)
-	tok, err := jwt.Parse(str, func(t *jwt.Token) (any, error) {
+	tok, err := jwt.Parse(str, func(*jwt.Token) (any, error) {
 		return &priv.PublicKey, nil
 	})
 	r.NoError(err)
@@ -919,7 +922,7 @@ func makeAuthRequest(t *testing.T, tc authTest) {
 	// Verify the rest of the response.
 	a.Equal("Bearer", res["token_type"])
 	if tc.opts.ExpireAfter > 0 {
-		a.Equal(float64(tc.opts.ExpireAfter/time.Second), res["expires_in"])
+		a.InEpsilon(float64(tc.opts.ExpireAfter/time.Second), res["expires_in"], 0.02)
 	} else {
 		_, ok = res["expires_in"]
 		a.False(ok)

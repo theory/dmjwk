@@ -17,6 +17,10 @@ import (
 	"time"
 )
 
+const (
+	filePerms = 0o600
+)
+
 func tlsConfig(opts *Options) (*tls.Config, error) {
 	var (
 		cert tls.Certificate
@@ -47,7 +51,7 @@ func tlsConfig(opts *Options) (*tls.Config, error) {
 
 		// Write out the CA cert.
 		file := filepath.Clean(filepath.Join(opts.ConfigDir, "ca.pem"))
-		if err = os.WriteFile(file, bundle.CA, 0o666); err != nil {
+		if err = os.WriteFile(file, bundle.CA, filePerms); err != nil {
 			return nil, err
 		}
 	}
@@ -112,10 +116,13 @@ func selfSigned() (*TLSBundle, error) {
 
 	// PEM-encode the cert.
 	caPEM := new(bytes.Buffer)
-	pem.Encode(caPEM, &pem.Block{
+	err = pem.Encode(caPEM, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: caBytes,
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	// Create the server certificate with a random serial number.
 	// Give the cert a random serial number.
@@ -151,10 +158,9 @@ func selfSigned() (*TLSBundle, error) {
 	// PEM-encode the cert.
 	certPEM := new(bytes.Buffer)
 	err = pem.Encode(certPEM, &pem.Block{Type: "CERTIFICATE", Bytes: certBytes})
-	pem.Encode(certPEM, &pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: certBytes,
-	})
+	if err != nil {
+		return nil, err
+	}
 
 	// Create and PEM-encode the key.
 	x509Bytes, err := x509.MarshalECPrivateKey(certPrivKey)
@@ -162,10 +168,13 @@ func selfSigned() (*TLSBundle, error) {
 		return nil, err
 	}
 	certPrivKeyPEM := new(bytes.Buffer)
-	pem.Encode(certPrivKeyPEM, &pem.Block{
+	err = pem.Encode(certPrivKeyPEM, &pem.Block{
 		Type:  "EC PRIVATE KEY",
 		Bytes: x509Bytes,
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	// All set.
 	return &TLSBundle{CA: caPEM.Bytes(), Cert: certPEM.Bytes(), Key: certPrivKeyPEM.Bytes()}, nil

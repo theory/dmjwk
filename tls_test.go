@@ -31,7 +31,10 @@ func TestSelfSigned(t *testing.T) {
 	r.NoError(err)
 
 	// Make sure it all works.
-	checkTLSConfig(t, bundle.CA, &tls.Config{Certificates: []tls.Certificate{cert}})
+	checkTLSConfig(t, bundle.CA, &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
+	})
 }
 
 func TestTLSConfig(t *testing.T) {
@@ -51,7 +54,7 @@ func TestTLSConfig(t *testing.T) {
 	a.NotNil(cfg)
 
 	// Should have written out ca.pem.
-	caBytes, err := os.ReadFile(filepath.Join(tmp, "ca.pem"))
+	caBytes, err := os.ReadFile(filepath.Clean(filepath.Join(tmp, "ca.pem")))
 	r.NoError(err)
 
 	// Make sure it all works.
@@ -59,10 +62,11 @@ func TestTLSConfig(t *testing.T) {
 
 	// Write out key and cert files.
 	bundle, err := selfSigned()
+	r.NoError(err)
 	keyFile := filepath.Join(tmp, "key.pem")
 	certFile := filepath.Join(tmp, "cert.pem")
-	r.NoError(os.WriteFile(keyFile, bundle.Key, 0o666))
-	r.NoError(os.WriteFile(certFile, bundle.Cert, 0o666))
+	r.NoError(os.WriteFile(keyFile, bundle.Key, filePerms))
+	r.NoError(os.WriteFile(certFile, bundle.Cert, filePerms))
 
 	// Point to them.
 	cfg, err = tlsConfig(&Options{
@@ -81,7 +85,7 @@ func checkTLSConfig(t *testing.T, ca []byte, cfg *tls.Config) {
 
 	// Configure an HTTP server.
 	server := httptest.NewUnstartedServer(
-		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			fmt.Fprint(w, "success!")
 		}),
 	)
@@ -94,14 +98,20 @@ func checkTLSConfig(t *testing.T, ca []byte, cfg *tls.Config) {
 	a.True(pool.AppendCertsFromPEM(ca))
 	client := http.Client{
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{RootCAs: pool},
+			TLSClientConfig: &tls.Config{
+				RootCAs:    pool,
+				MinVersion: tls.VersionTLS12,
+			},
 		},
 	}
 
 	// Test request.
-	resp, err := client.Get(server.URL)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, nil)
+	r.NoError(err)
+	resp, err := client.Do(req)
 	r.NoError(err)
 	body, err := io.ReadAll(resp.Body)
 	r.NoError(err)
+	r.NoError(resp.Body.Close())
 	a.Equal("success!", string(body))
 }

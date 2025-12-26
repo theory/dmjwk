@@ -1,0 +1,42 @@
+version: "2"
+run:
+  build-tags:
+    - compare
+linters:
+  default: all
+  disable:
+    # Too strict.
+    - cyclop # redundant, covered by gocyclo
+    - depguard
+    - err113
+    - exhaustruct
+    - nestif # redundant, covered by gocyclo
+    - nlreturn
+    - varnamelen
+    - wsl
+    - wsl_v5
+    - noinlineerr
+    - wrapcheck # don't care for this simple app
+  exclusions:
+    generated: lax
+    rules:
+      - path: _test\.go$
+        linters:
+          - funlen
+  settings:
+    errcheck:
+      disable-default-exclusions: false
+      check-type-assertions: false
+      check-blank: false
+      exclude-functions:
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - fmt.Fprint
+    exhaustive:
+      default-signifies-exhaustive: true
+    funlen:
+      ignore-comments: true
+    tagliatelle:
+      case:
+        rules:
+          json: snake

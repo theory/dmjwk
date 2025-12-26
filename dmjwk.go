@@ -1,3 +1,4 @@
+// Package main provides dmjwk, the demo JWK authentication server.
 package main
 
 import (
@@ -37,15 +38,11 @@ type Options struct {
 	KeyPath     string `required:"true" split_words:"true"`
 }
 
-type Server struct {
-	keyset *jwkset.MemoryJWKSet
-	server *http.Server
-}
-
 func main() {
 	if msg, err := exec(); err == nil {
 		slog.Error(msg, "error", err)
-		os.Exit(2)
+		const errExit = 2
+		os.Exit(errExit)
 	}
 }
 
@@ -66,6 +63,7 @@ func exec() (string, error) {
 		return "cannot create server", err
 	}
 
+	//nolint:noctx
 	listener, err := net.Listen("tcp", srv.Addr)
 	if err != nil {
 		return "cannot listen on port", err
@@ -112,10 +110,22 @@ func server(opts *Options, set *jwkset.MemoryJWKSet) (*http.Server, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	const (
+		readHeaderTimeout = 100 * time.Millisecond
+		readTimeout       = 5 * time.Second
+		writeTimeout      = 10 * time.Second
+		idleTimeout       = 10 * time.Second
+	)
+
 	return &http.Server{
-		Addr:      fmt.Sprintf(":%v", opts.Port),
-		Handler:   mux,
-		TLSConfig: tls,
+		Addr:              fmt.Sprintf(":%v", opts.Port),
+		Handler:           mux,
+		TLSConfig:         tls,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
 	}, nil
 }
 
