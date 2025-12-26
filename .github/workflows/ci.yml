@@ -16,7 +16,9 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with: { go-version-file: go.mod, check-latest: true }
-      - name: Lint
-        run: make lint
+      - name: Install Dependencies
+        run: make debian-lint-depends
+      - name: Run pre-commit
+        uses: pre-commit/action@v3.0.1
       - name: Run Tests
         run: make test

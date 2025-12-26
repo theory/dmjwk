@@ -58,4 +58,15 @@ debian-lint-depends:
 app: _build/$(PLATFORM)/dmjwk
 
  _build/%/dmjwk: $(filter-out %_test.go,$(shell find . -name '*.go'))
-	GOOS=$(word 1,$(subst -, ,$*)) GOARCH=$(word 2,$(subst -, ,$*)) $(GO) build $(ldflags) -o $@
+	GOOS=$(word 1,$(subst -, ,$*)) GOARCH=$(word 2,$(subst -, ,$*)) CGO_ENABLED=0 $(GO) build $(ldflags) -o $@
+
+############################################################################
+# OCI images.
+.PHONY: image # Build the linux/amd64 OCI image.
+image: _build/linux-$(GOARCH)/dmjwk
+	version=$(VERSION) revision=$(REVISION) docker buildx bake --set *.platform=linux/$(GOARCH) --load
+	docker run --rm ghcr.io/theory/dmjwk --version
+
+.PHONY: release-image # Build the linux/amd64 OCI image.
+release-image: _build/linux-amd64/dmjwk _build/linux-arm64/dmjwk _build/linux-ppc64le/dmjwk _build/linux-arm/dmjwk _build/linux-s390x/dmjwk
+	version=$(VERSION) revision=$(REVISION) docker buildx bake $(if $(filter true,$(PUSH)),--push,)
