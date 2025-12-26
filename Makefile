@@ -18,7 +18,15 @@ ldflags = -ldflags="$\
 .SECONDARY:
 
 ############################################################################
-# Main tasks.
+# App
+.PHONY: app # Build dmjwk
+app: _build/$(PLATFORM)/dmjwk
+
+ _build/%/dmjwk: $(filter-out %_test.go,$(shell find . -name '*.go'))
+	GOOS=$(word 1,$(subst -, ,$*)) GOARCH=$(word 2,$(subst -, ,$*)) CGO_ENABLED=0 $(GO) build $(ldflags) -o $@
+
+############################################################################
+# Test, Lint, Clean.
 .PHONY: test # Run the unit tests
 test:
 	GOTOOLCHAIN=local $(GO) test ./... -count=1
@@ -38,6 +46,39 @@ clean:
 	@rm -rf cover.out _build
 
 ############################################################################
+# Release artifacts.
+.PHONY: release # Build a release zip file or .tar.gz & tar.bz2 files.
+ifeq ($(GOOS),windows)
+release: _build/artifacts/dmjwk-$(VERSION)-windows-$(GOARCH).zip
+else
+release: _build/artifacts/dmjwk-$(VERSION)-$(PLATFORM).tar.gz
+endif
+
+# Build a release zip file for Windows.
+_build/artifacts/dmjwk-$(VERSION)-windows-$(GOARCH).zip: README.md LICENSE.md CHANGELOG.md _build/windows-$(GOARCH)/dmjwk
+	@mkdir -p "_build/artifacts/dmjwk-$(VERSION)-windows-$(GOARCH)"
+	cp $^ "_build/artifacts/dmjwk-$(VERSION)-windows-$(GOARCH)"
+	cd _build/artifacts && 7z a "dmjwk-$(VERSION)-windows-$(GOARCH).zip" "dmjwk-$(VERSION)-windows-$(GOARCH)"
+	rm -R "_build/artifacts/dmjwk-$(VERSION)-windows-$(GOARCH)"
+
+# Build a .tar.gz file for the specified platform.
+_build/artifacts/dmjwk-$(VERSION)-$(PLATFORM).tar.gz: README.md LICENSE.md CHANGELOG.md _build/$(PLATFORM)/dmjwk
+	@mkdir -p "_build/artifacts/dmjwk-$(VERSION)-$(PLATFORM)"
+	cp $^ "_build/artifacts/dmjwk-$(VERSION)-$(PLATFORM)"
+	cd _build/artifacts && tar zcvf "dmjwk-$(VERSION)-$(PLATFORM).tar.gz" "dmjwk-$(VERSION)-$(PLATFORM)"
+	rm -R "_build/artifacts/dmjwk-$(VERSION)-$(PLATFORM)"
+
+run: _build/$(PLATFORM)/dmjwk
+	@./_build/$(PLATFORM)/dmjwk --version
+
+show-build: _build/$(PLATFORM)/dmjwk
+	@echo ./_build/$(PLATFORM)/dmjwk
+
+.PHONY: version-env # Echo setting an environment variable with the release version.
+version-env:
+	@echo VERSION=$(VERSION)
+
+############################################################################
 # Utilities.
 .PHONY: brew-lint-depends # Install linting tools from Homebrew
 brew-lint-depends:
@@ -51,14 +92,6 @@ debian-lint-depends:
 .git/hooks/pre-commit:
 	@printf "#!/bin/sh\nmake lint\n" > $@
 	@chmod +x $@
-
-############################################################################
-# App
-.PHONY: app # Build dmjwk
-app: _build/$(PLATFORM)/dmjwk
-
- _build/%/dmjwk: $(filter-out %_test.go,$(shell find . -name '*.go'))
-	GOOS=$(word 1,$(subst -, ,$*)) GOARCH=$(word 2,$(subst -, ,$*)) CGO_ENABLED=0 $(GO) build $(ldflags) -o $@
 
 ############################################################################
 # OCI images.

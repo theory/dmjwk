@@ -1,22 +1,90 @@
 name: 🚀 Release
 on:
   push:
-    # Release on semantic version tag.
-    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+permissions:
+  contents: write
 jobs:
-  release:
-    name: 🚀 Release on GitHub
+  list:
+    name: 📋 List Platforms
     runs-on: ubuntu-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    outputs:
+      platforms: ${{ steps.list.outputs.platforms }}
     steps:
-      - name: Check out the repo
+      - name: Checkout
         uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - name: List Supported
+        id: list
+        uses: theory/go-dist-action@v0
+        with:
+          # Exclude mobile and WASM
+          exclude-os: android ios
+          exclude-arch: wasm
+
+  archive:
+    name: ${{ matrix.go.emoji }} ${{ matrix.go.GOOS }}/${{ matrix.go.GOARCH }}
+    needs: list
+    runs-on: ${{ matrix.go.runner }}-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ${{ fromJson(needs.list.outputs.platforms) }}
+    env:
+      GOOS: ${{ matrix.go.GOOS }}
+      GOARCH: ${{ matrix.go.GOARCH }}
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with: { go-version-file: go.mod, check-latest: true }
+      - name: Create Artifact
+        shell: bash
+        run: make release
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        if: startsWith(github.ref, 'refs/tags')
+        with:
+          path: "_build/artifacts/dmjwk-*"
+          name: "dmjwk-${{ matrix.go.GOOS }}-${{ matrix.go.GOARCH }}"
+          overwrite: true
+          if-no-files-found: error
+
+  release:
+    name: 🚀 Release dmjwk
+    needs: archive
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+      - name: Get the Version
+        run: make version-env >> $GITHUB_ENV
+      - name: Check the Version
+        shell: bash
+        run: |
+          if [ "${{ github.ref_name }}" != "$VERSION" ]; then
+              printf "Makefile version %s does not match tag %s\n" "$VERSION" "${{ github.ref_name }}" >&2
+              exit 1
+          fi
+        if: startsWith( github.ref, 'refs/tags/v' )
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        if: startsWith(github.ref, 'refs/tags')
+        with:
+          path: artifacts
+          pattern: dmjwk-*
+          merge-multiple: true
       - name: Generate Release Notes
         id: notes
         uses: theory/changelog-version-notes-action@v0
-      - name: Create GitHub Release
+        with: { version: "${{ env.VERSION }}" }
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Release ${{ github.ref_name }}
-          body_path: "${{ steps.notes.outputs.file }}"
+          name: "Release ${{ env.VERSION }}"
+          body_path: ${{ steps.notes.outputs.file }}
+          files: "artifacts/dmjwk-*"
+          prerelease: ${{ contains(github.ref_name, '-') }}
+        if: startsWith( github.ref, 'refs/tags/v' )
