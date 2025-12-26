@@ -6,6 +6,15 @@ basic [Resource Owner Password Credentials Grant] OAuth 2 flow that returns a
 [JSON Web Tokens] for "authenticated" users. It signs the tokens with a
 memory-persistent [JSON Web Key] set.
 
+## Usage
+
+dmjwk takes only a single argument `--version` (or just `version`), which
+causes it to print the version information and exit:
+
+```console
+dmjwk --version
+```
+
 
   [JSON Web Key]: https://www.rfc-editor.org/rfc/rfc7517
     "RFC 7517 JSON Web Key (JWK)"

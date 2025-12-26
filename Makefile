@@ -2,7 +2,7 @@ GO       ?= go
 GOOS     ?= $(word 1,$(subst /, ,$(word 4, $(shell $(GO) version))))
 GOARCH   ?= $(word 2,$(subst /, ,$(word 4, $(shell $(GO) version))))
 PLATFORM := $(GOOS)-$(GOARCH)
-VERSION  := v0.0.1-dev
+VERSION  := v0.1.0-dev
 
 export VERSION GOOS GOARCH
 # https://github.com/xaionaro/documentation/blob/master/golang/reduce-binary-size.md
@@ -76,7 +76,7 @@ show-build: _build/$(PLATFORM)/dmjwk
 
 .PHONY: version-env # Echo setting an environment variable with the release version.
 version-env:
-	@echo VERSION=$(VERSION)
+	@echo VERSION=$${VERSION%-*}
 
 ############################################################################
 # Utilities.
