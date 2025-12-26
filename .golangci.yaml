@@ -12,11 +12,11 @@ linters:
     - exhaustruct
     - nestif # redundant, covered by gocyclo
     - nlreturn
+    - noinlineerr
     - varnamelen
+    - wrapcheck # don't care for this simple app
     - wsl
     - wsl_v5
-    - noinlineerr
-    - wrapcheck # don't care for this simple app
   exclusions:
     generated: lax
     rules:

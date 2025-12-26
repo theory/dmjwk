@@ -74,14 +74,7 @@ type TLSBundle struct {
 
 func selfSigned() (*TLSBundle, error) {
 	// Set up a subject shared by the CA and certs.
-	sub := pkix.Name{
-		Organization:  []string{"Hamilton Grange"},
-		Country:       []string{"US"},
-		Province:      []string{"NY"},
-		Locality:      []string{"New York"},
-		StreetAddress: []string{"414 West 141st Street"},
-		PostalCode:    []string{"10031"},
-	}
+	sub := pkix.Name{Organization: []string{"dmjwk Holdings, Inc."}}
 
 	// Create a CA template with a random serial number.
 	sn, err := rand.Int(rand.Reader, big.NewInt(math.MaxInt32))
@@ -103,23 +96,14 @@ func selfSigned() (*TLSBundle, error) {
 	}
 
 	// Create the key pair.
-	caPrivKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, err
 	}
 
 	// Create and sign the CA with the public key.
-	caBytes, err := x509.CreateCertificate(rand.Reader, ca, ca, &caPrivKey.PublicKey, caPrivKey)
-	if err != nil {
-		return nil, err
-	}
-
-	// PEM-encode the cert.
-	caPEM := new(bytes.Buffer)
-	err = pem.Encode(caPEM, &pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: caBytes,
-	})
+	// Generate the self-signed CA private key and public certificate.
+	caPEM, _, err := newKeyPair(caKey, caKey, ca, ca, false)
 	if err != nil {
 		return nil, err
 	}
@@ -150,32 +134,42 @@ func selfSigned() (*TLSBundle, error) {
 	}
 
 	// Create and sign the certificate with the public key.
-	certBytes, err := x509.CreateCertificate(rand.Reader, cert, ca, &certPrivKey.PublicKey, caPrivKey)
-	if err != nil {
-		return nil, err
-	}
-
-	// PEM-encode the cert.
-	certPEM := new(bytes.Buffer)
-	err = pem.Encode(certPEM, &pem.Block{Type: "CERTIFICATE", Bytes: certBytes})
-	if err != nil {
-		return nil, err
-	}
-
-	// Create and PEM-encode the key.
-	x509Bytes, err := x509.MarshalECPrivateKey(certPrivKey)
-	if err != nil {
-		return nil, err
-	}
-	certPrivKeyPEM := new(bytes.Buffer)
-	err = pem.Encode(certPrivKeyPEM, &pem.Block{
-		Type:  "EC PRIVATE KEY",
-		Bytes: x509Bytes,
-	})
+	certPEM, certPrivKeyPEM, err := newKeyPair(caKey, certPrivKey, ca, cert, true)
 	if err != nil {
 		return nil, err
 	}
 
 	// All set.
-	return &TLSBundle{CA: caPEM.Bytes(), Cert: certPEM.Bytes(), Key: certPrivKeyPEM.Bytes()}, nil
+	return &TLSBundle{CA: caPEM, Cert: certPEM, Key: certPrivKeyPEM}, nil
+}
+
+func newKeyPair(caKey, certKey *ecdsa.PrivateKey, ca, cert *x509.Certificate, mkPriv bool) ([]byte, []byte, error) {
+	// Sign the public key with the caKey and generate an x509 cert.
+	certBytes, err := x509.CreateCertificate(rand.Reader, cert, ca, &certKey.PublicKey, caKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// PEM-encode the cert.
+	certPEM := new(bytes.Buffer)
+	if err := pem.Encode(certPEM, &pem.Block{Type: "CERTIFICATE", Bytes: certBytes}); err != nil {
+		return nil, nil, err
+	}
+
+	if !mkPriv {
+		return certPEM.Bytes(), nil, nil
+	}
+
+	// Generate and PEM-encode the private key.
+	x509Bytes, err := x509.MarshalECPrivateKey(certKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	keyPEM := new(bytes.Buffer)
+	if err := pem.Encode(keyPEM, &pem.Block{Type: "EC PRIVATE KEY", Bytes: x509Bytes}); err != nil {
+		return nil, nil, err
+	}
+
+	// Return the key pair.
+	return certPEM.Bytes(), keyPEM.Bytes(), nil
 }
