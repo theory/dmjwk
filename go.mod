@@ -1,6 +1,6 @@
 module github.com/theory/dmjwk
 
-go 1.25.3
+go 1.25.5
 
 require (
 	github.com/MicahParks/jwkset v0.11.0

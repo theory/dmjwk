@@ -1,0 +1,22 @@
+name: ✅ Test and Lint
+on:
+  push:
+    branches-ignore: [wip/**]
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [[🐧, Ubuntu], [🍎, macOS], [🪟, Windows]]
+    name: ${{ matrix.os[0] }} Test on ${{ matrix.os[1] }}
+    runs-on: ${{ matrix.os[1] }}-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+        with: { submodules: true }
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with: { go-version-file: go.mod, check-latest: true }
+      - name: Lint
+        run: make lint
+      - name: Run Tests
+        run: make test
