@@ -35,12 +35,12 @@ var (
 )
 
 type Options struct {
-	ConfigDir   string        `split_words:"true" default:"/etc/dmjwk"`
+	ConfigDir   string        `default:"/etc/dmjwk" split_words:"true"`
 	Kids        []string      `split_words:"true"`
 	Issuer      string        `split_words:"true"`
 	Audience    string        `split_words:"true"`
-	ExpireAfter time.Duration `split_words:"true" default:"1h"`
-	Port        uint32        `split_words:"true" default:"443"`
+	ExpireAfter time.Duration `default:"1h"         split_words:"true"`
+	Port        uint32        `default:"443"        split_words:"true"`
 	CertPath    string        `split_words:"true"`
 	KeyPath     string        `split_words:"true"`
 	HostNames   []string      `split_words:"true"`

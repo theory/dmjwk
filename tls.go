@@ -120,7 +120,7 @@ func selfSigned(opts *Options) (*TLSBundle, error) {
 		Subject:      sub,
 		SerialNumber: sn,
 		SubjectKeyId: []byte(randID()),
-		IPAddresses:  []net.IP{net.IPv4(local, 0, 0, 1), net.IPv6loopback},
+		IPAddresses:  []net.IP{net.IPv4(local, 0, 0, 1), net.IPv4(0, 0, 0, 0), net.IPv6loopback},
 		DNSNames:     opts.dnsNames(),
 		NotBefore:    now,
 		NotAfter:     now.AddDate(0, 0, lifetimeDays),

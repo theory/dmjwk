@@ -62,7 +62,6 @@ func TestOptions(t *testing.T) {
 			a.Equal(hosts, tc.opts.dnsNames())
 		})
 	}
-
 }
 
 func TestKeyset(t *testing.T) {
