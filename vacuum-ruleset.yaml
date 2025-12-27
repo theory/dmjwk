@@ -1,0 +1,4 @@
+extends: [[vacuum:oas, recommended]]
+rules:
+  oas3-api-servers: false
+  camel-case-properties: false

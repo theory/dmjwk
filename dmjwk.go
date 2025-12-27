@@ -206,16 +206,6 @@ func newResponse(opts *Options, tok string, form url.Values) *accessResponse {
 	return &body
 }
 
-/*
-* grant_type
-* username
-* password
-* kid
-* scope
-* iss
-* aud
- */
-
 // https://datatracker.ietf.org/doc/html/rfc6750#section-6.1.1
 // https://datatracker.ietf.org/doc/html/rfc6750#section-4
 const tokenType = "Bearer"

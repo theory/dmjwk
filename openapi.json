@@ -1,0 +1,253 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "dmjwk Demo IDP Server",
+    "description": "dmjwk (pronounced \"dumb jock\") is a simple demo web server that provides a\nbasic [Resource Owner Password Credentials\nGrant](https://datatracker.ietf.org/doc/html/rfc6749#section-4.3) OAuth 2\nflow that returns a [JSON Web Tokens] for \"authenticated\" users. It signs\nthe tokens with a memory-persistent [JSON Web Key] set.\n",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/authorization": {
+      "post": {
+        "operationId": "post-auth",
+        "summary": "Password-based authentication and JWK-issuing API",
+        "description": "[Resource Owner Password Credentials\nGrant](https://datatracker.ietf.org/doc/html/rfc6749#section-4.3)\nOAuth 2 API that returns a [JSON Web Tokens] for \"authenticated\"\nusers.\n",
+        "tags": ["password", "credentials", "grant", "JWT"],
+        "requestBody": {
+          "required": true,
+          "description": "Resource Owner Password Credentials Grant",
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["grant_type", "username", "password"],
+                "properties": {
+                  "grant_type": {
+                    "const": "password",
+                    "description": "The type of grant. Must be \"password\"."
+                  },
+                  "username": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "description": "The username to authenticate. Will be returned in the JWT `sub` field.",
+                    "examples": ["theory", "Bagel", "dmjwk.example/apps/client"]
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "description": "The password to authenticate. Authentication succeeds base64-encoded username without trailing equal signs.",
+                    "examples": [
+                      "dGhlb3J5",
+                      "QmFnZWw",
+                      "ZG1qd2suZXhhbXBsZS9hcHBzL2NsaWVudA"
+                    ]
+                  },
+                  "kid": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024,
+                    "description": "The ID of the Key to use to sign the JWT. Must be one of the values specified in the `DMJWK_KIDS` environment variable on service start.",
+                    "examples": ["main", "big-kid", "Bart"]
+                  },
+                  "scope": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024,
+                    "description": "Value to include in the `scope` field of the response.",
+                    "examples": ["read", "write"]
+                  },
+                  "iss": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024,
+                    "description": "Value to include in the the JWT `iss` field.",
+                    "examples": ["dmjwk", "my-idp", "authorizer"]
+                  },
+                  "aud": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024,
+                    "description": "Value to include in the the JWT `aud` field.",
+                    "examples": ["my-app", "Slinky", "weber"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authentication succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "token_type",
+                    "expires_in",
+                    "scope",
+                    "access_token"
+                  ],
+                  "properties": {
+                    "token_type": {
+                      "const": "Bearer",
+                      "description": "The [type of access token](https://datatracker.ietf.org/doc/html/rfc6749#section-7.1) issued by the response."
+                    },
+                    "expires_in": {
+                      "type": "integer",
+                      "description": "The lifetime in seconds of the access token expressed in seconds. Determined by the value of the `DMJWK_EXPIRE_AFTER` environment variable on service start.",
+                      "examples": [3600, 86400]
+                    },
+                    "scope": {
+                      "type": "string",
+                      "description": "The scope requested by the client, via the `scope` property of the request. Defaults to \"read\".",
+                      "examples": ["read", "write"]
+                    },
+                    "access_token": {
+                      "type": "string",
+                      "description": "The issued [JSON Web Token](https://www.rfc-editor.org/rfc/rfc7519).",
+                      "examples": [
+                        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.KMUFsIDTnFmyG3nMiGM6H9FNFUROf3wh7SmqJp-QV30"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "const": "invalid_request",
+                      "description": "An authorization response [error code](https://datatracker.ietf.org/doc/html/rfc6749#section-5.2). dmjwk currently only returns \"invalid_request\"."
+                    },
+                    "error_description": {
+                      "type": "string",
+                      "description": "A description of the error that cause the request to fail.",
+                      "examples": [
+                        "missing grant_type",
+                        "missing username or password"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/.well-known/jwks.json": {
+      "get": {
+        "tags": ["jwks", "keys", "keyset"],
+        "operationId": "get-jwks",
+        "summary": "Fetch the JSON Web Key set used to sign tokens returned by the /authorization endpoint.",
+        "description": "Unauthenticated endpoint that returns the public [JSON Web\nKey](https://www.rfc-editor.org/rfc/rfc7517) set generated by dmjwk.\nWill include the public keys for all of the key IDs specified by the\n`DMJWK_KIDS` environment variable.\n",
+        "responses": {
+          "200": {
+            "description": "The JSON Web Key set. dmjwk only generates \"P-256\" elliptic curve keys.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["keys"],
+                  "properties": {
+                    "keys": {
+                      "type": "array",
+                      "description": "The JSON Web Keys.",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["kty", "crv", "x", "y"],
+                        "properties": {
+                          "kty": {
+                            "const": "EC",
+                            "description": "The \"kty\" (key type) parameter identifies the cryptographic algorithm family used with the key, such as \"RSA\" or \"EC\"."
+                          },
+                          "kid": {
+                            "type": "string",
+                            "description": "TThe \"kid\" (key ID) parameter is used to match a specific key.",
+                            "examples": ["main", "big-kid", "Bart"]
+                          },
+                          "crv": {
+                            "const": "P-256",
+                            "description": "The \"crv\" (curve) parameter identifies the cryptographic curve used with the key."
+                          },
+                          "x": {
+                            "type": "string",
+                            "description": "The \"x\" (x coordinate) parameter contains the x coordinate for the Elliptic Curve point.",
+                            "examples": [
+                              "Z8gIZkC0mDYdYZOAwC6c4nDnOZ84r0P-4ihWnaZmgWo",
+                              "B4pItG9dhem745iadkOj8jGVXWOhRKYOVvKo3PhE0rg"
+                            ]
+                          },
+                          "y": {
+                            "type": "string",
+                            "description": "The \"y\" (y coordinate) parameter contains the y coordinate for the Elliptic Curve point.",
+                            "examples": [
+                              "JUVH6HzpTvJQ5A5mVFGnntuG3OQeaIT8aIHqYFSVAGQ",
+                              "iw3XDd-UwvGrqPnL7r3JzfDy7pn4LQbYyqMXVaI6LoI"
+                            ]
+                          }
+                        }
+                      },
+                      "example": [
+                        {
+                          "kid": "bart",
+                          "kty": "EC",
+                          "crv": "P-256",
+                          "x": "Z8gIZkC0mDYdYZOAwC6c4nDnOZ84r0P-4ihWnaZmgWo",
+                          "y": "JUVH6HzpTvJQ5A5mVFGnntuG3OQeaIT8aIHqYFSVAGQ"
+                        },
+                        {
+                          "kty": "EC",
+                          "kid": "a",
+                          "crv": "P-256",
+                          "x": "B4pItG9dhem745iadkOj8jGVXWOhRKYOVvKo3PhE0rg",
+                          "y": "iw3XDd-UwvGrqPnL7r3JzfDy7pn4LQbYyqMXVaI6LoI"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "password"
+    },
+    {
+      "name": "credentials"
+    },
+    {
+      "name": "grant"
+    },
+    {
+      "name": "JWT"
+    },
+    {
+      "name": "jwks"
+    },
+    {
+      "name": "keys"
+    },
+    {
+      "name": "keyset"
+    }
+  ]
+}
