@@ -755,21 +755,24 @@ func TestRun(t *testing.T) {
 				`{"level":"INFO","msg":"server shut down"}`,
 			},
 		},
-		{
-			test: "timeout",
-			sig: func(stop chan os.Signal, _ chan error) {
-				stop <- os.Interrupt
+		/*
+			// XXX This should cause the shutdown to fail, but on most platforms
+			// does not. Would need to set something up to keep it busy long
+			// enough for the shutdown to fail.
+			{
+				test: "timeout",
+				sig: func(stop chan os.Signal, _ chan error) {
+					stop <- os.Interrupt
+				},
+				timeout: -1,
+				exp:     "server shutdown failed",
+				log: []string{
+					`{"level":"INFO","msg":"server starting","address":":0"}`,
+					`{"level":"INFO","msg":"server shutting down","timeout":-1}`,
+					`{"level":"ERROR","msg":"server shutdown failed","error":"context deadline exceeded"}`,
+				},
 			},
-			timeout: -1,
-			// XXX This should cause the shutdown to fail, but does not.
-			// exp:     "server shutdown failed",
-			log: []string{
-				`{"level":"INFO","msg":"server starting","address":":0"}`,
-				`{"level":"INFO","msg":"server shutting down","timeout":-1}`,
-				`{"level":"INFO","msg":"server shut down"}`,
-				// `{"level":"ERROR","msg":"server shutdown failed","error":"context deadline exceeded"}`,
-			},
-		},
+		*/
 		{
 			test: "serve_error",
 			sig: func(_ chan os.Signal, serveErr chan error) {
