@@ -21,6 +21,12 @@ repos:
         entry: go mod tidy
         types: [go]
         pass_filenames: false
+      - id: go-test
+        name: Go Test
+        language: system
+        entry: go test ./...
+        types: [go]
+        pass_filenames: false
       - id: golangci-lint
         name: Go linting
         language: system

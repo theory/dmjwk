@@ -2,6 +2,7 @@ name: 🍪 Bake Docker Image
 
 on:
   push:
+    branches-ignore: [wip/**]
 
 permissions:
   id-token: write

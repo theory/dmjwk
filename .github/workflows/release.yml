@@ -1,6 +1,7 @@
 name: 🚀 Release
 on:
   push:
+    branches-ignore: [wip/**]
 permissions:
   contents: write
 jobs:

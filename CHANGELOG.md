@@ -9,7 +9,9 @@ All notable changes to this project will be documented in this file. It uses the
 
 ## [v0.1.1] — Unreleased
 
+### 🏗️ Build Setup
 
+*   Added CI workflows for FreeBSD, OpenBSD, and NetBSD on amd64 and arm64
 
   [v0.1.1]: https://github.com/theory/jsonpath/compare/v0.1.0...v0.1.1
 
