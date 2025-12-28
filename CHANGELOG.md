@@ -13,6 +13,11 @@ All notable changes to this project will be documented in this file. It uses the
 
 *   Added CI workflows for FreeBSD, OpenBSD, and NetBSD on amd64 and arm64
 
+### 📚 Documentation
+
+*   Added installation instructions to the [README](README.md)
+*   Added Docker example to the Quick Start in the [README](README.md)
+
   [v0.1.1]: https://github.com/theory/jsonpath/compare/v0.1.0...v0.1.1
 
 ## [v0.1.0] — 2025-12-28
