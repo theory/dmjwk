@@ -157,10 +157,11 @@ func TestMux(t *testing.T) {
 			set, err := keyset(&tc.opts)
 			r.NoError(err)
 
-			// Test fetching the JWKs.
+			// Test fetching the JWKs and OpenAPI.
 			mux, err := newMux(&tc.opts, set)
 			r.NoError(err)
 			makeJWKsRequest(t, mux, set)
+			makeOpenAPIRequest(t, mux)
 
 			// Test authentication.
 			makeAuthRequest(t, authTest{
@@ -627,8 +628,9 @@ func TestServer(t *testing.T) {
 			// Should have a "ca.pem" in the config dir.
 			a.FileExists(filepath.Join(tmp, "ca.pem"))
 
-			// Test fetching the JWKs.
+			// Test fetching the JWKs and openAPI
 			makeJWKsRequest(t, srv.Handler, set)
+			makeOpenAPIRequest(t, srv.Handler)
 
 			// Test the an auth request.
 			makeAuthRequest(t, authTest{
@@ -907,6 +909,28 @@ func makeJWKsRequest(t *testing.T, handler http.Handler, set *jwkset.MemoryJWKSe
 	body, err := io.ReadAll(resp.Body)
 	r.NoError(err)
 	a.JSONEq(string(pub), string(body))
+}
+
+func makeOpenAPIRequest(t *testing.T, handler http.Handler) {
+	t.Helper()
+	a := assert.New(t)
+	r := require.New(t)
+
+	exp, err := os.ReadFile("openapi.json")
+	r.NoError(err)
+
+	req := httptest.NewRequestWithContext(
+		t.Context(), http.MethodGet, "/openapi.json", nil,
+	)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	resp := w.Result()
+	a.Equal(http.StatusOK, resp.StatusCode)
+	a.Equal("application/json", resp.Header.Get("Content-Type"))
+	body, err := io.ReadAll(resp.Body)
+	r.NoError(err)
+	a.JSONEq(string(exp), string(body))
 }
 
 type authTest struct {

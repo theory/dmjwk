@@ -5,7 +5,34 @@
     "description": "dmjwk (pronounced \"dumb jock\") is a simple demo web server that provides a\nbasic [Resource Owner Password Credentials\nGrant](https://datatracker.ietf.org/doc/html/rfc6749#section-4.3) OAuth 2\nflow that returns a [JSON Web Tokens] for \"authenticated\" users. It signs\nthe tokens with a memory-persistent [JSON Web Key] set.\n",
     "version": "0.1.0"
   },
+  "jsonSchemaDialect": "https://spec.openapis.org/oas/3.1/dialect/base",
   "paths": {
+    "/openapi.json": {
+      "get": {
+        "operationId": "get-openapi",
+        "description": "Fetch the dmjwk OpenAPI document.",
+        "tags": ["OpenAPI"],
+        "responses": {
+          "200": {
+            "description": "The dmjwk OpenAPI Document.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$id": "https://github.com/theory/dmjwk/openapi.json",
+                  "$schema": "https://spec.openapis.org/oas/3.1/dialect/base",
+                  "properties": {
+                    "jsonSchemaDialect": {
+                      "const": "https://spec.openapis.org/oas/3.1/dialect/base"
+                    }
+                  },
+                  "required": ["jsonSchemaDialect"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/authorization": {
       "post": {
         "operationId": "post-auth",
@@ -248,6 +275,9 @@
     },
     {
       "name": "keyset"
+    },
+    {
+      "name": "OpenAPI"
     }
   ]
 }

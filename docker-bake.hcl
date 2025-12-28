@@ -36,7 +36,6 @@ target "default" {
   COPY "_build/$${TARGETOS}-$${TARGETARCH}/${app}" /bin/
   USER nonroot:nonroot
   ENTRYPOINT [ "/bin/${app}" ]
-  CMD ["--version"]
   EOT
 
   annotations = [

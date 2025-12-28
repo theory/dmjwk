@@ -6,6 +6,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	_ "embed"
 	"encoding/base32"
 	"encoding/base64"
 	"encoding/binary"
@@ -33,6 +34,9 @@ var (
 	version = "development"
 	build   = "HEAD"
 )
+
+//go:embed openapi.json
+var openapi []byte
 
 type Options struct {
 	ConfigDir   string        `default:"/etc/dmjwk" split_words:"true"`
@@ -178,6 +182,16 @@ func newMux(opts *Options, set *jwkset.MemoryJWKSet) (*http.ServeMux, error) {
 
 	// Setup a handler to "authenticate" a user.
 	mux.Handle("POST /authorization", setupAuth(opts, set))
+
+	// Setup a handler for the OpenAPI doc.
+	mux.HandleFunc("GET /openapi.json", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, err := w.Write(openapi)
+		if err != nil {
+			slog.ErrorContext(req.Context(), "cannot write response", "error", err)
+		}
+	})
 
 	return mux, nil
 }
