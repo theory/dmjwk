@@ -26,6 +26,111 @@ dmjwk --version
 dmjwk version v0.1.0 (0903349)
 ```
 
+## Quick Start
+
+Start dmjwk with a self-signed certificate:
+
+```sh
+env DMJWK_CONFIG_DIR="$(pwd)" DMJWK_PORT=4433 dmjwk
+```
+
+This should create `ca.pem` in the current directory. Use it with your
+favorite HTTP client to make validated requests. For example, to fetch the JWK
+set:
+
+```sh
+curl --cacert ca.pem https://localhost:4433/.well-known/jwks.json
+```
+
+To fetch a JWT signed by the first key in the JWK set, make a
+`application/x-www-form-urlencoded` POST with the required `grant_type`,
+`username`, and `password` fields:
+
+```sh
+form='grant_type=password&username=kamala&password=a2FtYWxh'
+curl --cacert ca.pem -d "$form" https://localhost:4433/authorization
+```
+
+Use the `access_token` field in the returned JSON as a Bearer token in a
+request to a service that uses `https://localhost:4433/.well-known/jwks.json`
+to authenticate requests.
+
+## APIs
+
+See [openapi.json](openapi.json) for the complete documentation. Here's a
+summary.
+
+### `GET /openapi.json`
+
+```sh
+curl --cacert ca.pem https://localhost:4433/openapi.json
+```
+
+Returns [openapi.json](openapi.json). Requires no authentication.
+
+### `GET /.well-known/jwks.json`
+
+```sh
+curl --cacert ca.pem https://localhost:4433/.well-known/jwks.json
+```
+
+Returns the [JSON Web Key] set generated when the service started. Example
+response:
+
+```json
+{
+  "keys": [
+    {
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "Ld98DHMIIanlpdOhYf-8GljNHnxHW_i6Bq0iltw9J98",
+      "y": "xxyRGhCFIjdQFD-TAs-y6uf18wsPvkq8wH_FsGY1GyU"
+    }
+  ]
+}
+```
+
+### `POST /authorization`
+
+```sh
+form='grant_type=password&username=kamala&password=a2FtYWxh'
+curl --cacert ca.pem -d "$form" https://localhost:4433/authorization
+```
+
+[Resource Owner Password Credentials Grant] API. Validates password
+authorization for a given username and returns an OAuth 2.0 [Access Token].
+Example successful response:
+
+```json
+{
+  "access_token": "eyJhbGciOiJFUzI1NiIsImtpZCI6IiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJrYW1hbGEiLCJleHAiOjE3NjY5NDQyNzcsImlhdCI6MTc2Njk0MDY3NywianRpIjoiZ3hhNnNib292aTg5dSJ9.04efdORHDA3GIPMnWErMPy4mXXsBfbnMJlzqZsxGVEc2cRvEWI0Mt_IqHDK4RYK_14BCEu2nTMiEPtgwC2IZ5A",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "scope": "read"
+}
+```
+
+Form fields:
+
+**`grant_type`**: Type of grant. Must be "password". Required.
+
+**`username`**: Username to authorize. May be any string. Will be returned in
+the JWT `sub` field. Required.
+
+**`password`**: Password. Authentication succeeds base64-encoded username
+without trailing equal signs. Required.
+
+**`kid`**: The ID of the Key to use to sign the JWT. Must be one of the values
+specified by [DMJWK_KIDS](#dmjwk_kids). Optional.
+
+**`scope`**: Value to include in the `scope` field of the response. Optional.
+
+**`iss`**: Value to include in the the JWT `iss` field. Overrides the value
+specified by [DMJWK_ISSUER](#dmjwk_issuer). Optional.
+
+**`aud`**: Value to include in the the JWT `aud` field. Overrides the value
+specified by [DMJWK_AUDIENCE](#dmjwk_audience). Optional.
+
 ## Configuration
 
 Otherwise it must be configured through the use of the following environment
@@ -92,3 +197,5 @@ suffix, such as "300ms", "-1.5h" or "2h45m". Valid time units are "ns", "us"
   [Resource Owner Password Credentials Grant]: https://datatracker.ietf.org/doc/html/rfc6749#section-4.3
   [curl]: https://everything.curl.dev/usingcurl/tls/verify.html#ca-store-in-files
     "everything curl: CA store in file(s)"
+  [Access Token]: https://datatracker.ietf.org/doc/html/rfc6749#section-5
+    "RFC 6749 Section 5: Issuing an Access Token"
