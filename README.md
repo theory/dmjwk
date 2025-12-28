@@ -57,7 +57,7 @@ a request to `/resource`:
 
 ```sh
 tok=$(curl -s --cacert ca.pem -d "$form" https://localhost:4433/authorization | jq -r .access_token)
- curl --cacert ca.pem -H "Authorization: Bearer $tok" https://localhost:4433/resource -d '
+curl --cacert ca.pem -H "Authorization: Bearer $tok" https://localhost:4433/resource -d '
 HELLO WORLD
 '
 ```

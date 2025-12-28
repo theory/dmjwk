@@ -2,7 +2,7 @@ GO       ?= go
 GOOS     ?= $(word 1,$(subst /, ,$(word 4, $(shell $(GO) version))))
 GOARCH   ?= $(word 2,$(subst /, ,$(word 4, $(shell $(GO) version))))
 PLATFORM := $(GOOS)-$(GOARCH)
-VERSION  := v0.1.0-dev
+VERSION  := v0.1.0
 
 export VERSION GOOS GOARCH
 # https://github.com/xaionaro/documentation/blob/master/golang/reduce-binary-size.md
@@ -55,14 +55,14 @@ release: _build/artifacts/dmjwk-$(VERSION)-$(PLATFORM).tar.gz
 endif
 
 # Build a release zip file for Windows.
-_build/artifacts/dmjwk-$(VERSION)-windows-$(GOARCH).zip: README.md LICENSE.md CHANGELOG.md _build/windows-$(GOARCH)/dmjwk
+_build/artifacts/dmjwk-$(VERSION)-windows-$(GOARCH).zip: README.md LICENSE.md CHANGELOG.md openapi.json _build/windows-$(GOARCH)/dmjwk
 	@mkdir -p "_build/artifacts/dmjwk-$(VERSION)-windows-$(GOARCH)"
 	cp $^ "_build/artifacts/dmjwk-$(VERSION)-windows-$(GOARCH)"
 	cd _build/artifacts && 7z a "dmjwk-$(VERSION)-windows-$(GOARCH).zip" "dmjwk-$(VERSION)-windows-$(GOARCH)"
 	rm -R "_build/artifacts/dmjwk-$(VERSION)-windows-$(GOARCH)"
 
 # Build a .tar.gz file for the specified platform.
-_build/artifacts/dmjwk-$(VERSION)-$(PLATFORM).tar.gz: README.md LICENSE.md CHANGELOG.md _build/$(PLATFORM)/dmjwk
+_build/artifacts/dmjwk-$(VERSION)-$(PLATFORM).tar.gz: README.md LICENSE.md CHANGELOG.md openapi.json _build/$(PLATFORM)/dmjwk
 	@mkdir -p "_build/artifacts/dmjwk-$(VERSION)-$(PLATFORM)"
 	cp $^ "_build/artifacts/dmjwk-$(VERSION)-$(PLATFORM)"
 	cd _build/artifacts && tar zcvf "dmjwk-$(VERSION)-$(PLATFORM).tar.gz" "dmjwk-$(VERSION)-$(PLATFORM)"
