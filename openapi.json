@@ -2,10 +2,26 @@
   "openapi": "3.1.0",
   "info": {
     "title": "dmjwk Demo IDP Server",
-    "description": "dmjwk (pronounced \"dumb jock\") is a simple demo web server that provides a\nbasic [Resource Owner Password Credentials\nGrant](https://datatracker.ietf.org/doc/html/rfc6749#section-4.3) OAuth 2\nflow that returns a [JSON Web Tokens] for \"authenticated\" users. It signs\nthe tokens with a memory-persistent [JSON Web Key] set.\n",
+    "description": "dmjwk (pronounced \"dumb jock\") is a simple demo web server that provides a basic [Resource Owner Password Credentials Grant](https://datatracker.ietf.org/doc/html/rfc6749#section-4.3) OAuth 2 flow that returns a [JSON Web Tokens] for \"authenticated\" users. It signs the tokens with a memory-persistent [JSON Web Key] set.",
     "version": "0.1.0"
   },
   "jsonSchemaDialect": "https://spec.openapis.org/oas/3.1/dialect/base",
+  "servers": [
+    {
+      "url": "https://localhost",
+      "description": "dmjwk Demo on localhost."
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "description": "OAuth 2 Bearer Token authentication",
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
   "paths": {
     "/openapi.json": {
       "get": {
@@ -37,7 +53,7 @@
       "post": {
         "operationId": "post-auth",
         "summary": "Password-based authentication and JWK-issuing API",
-        "description": "[Resource Owner Password Credentials\nGrant](https://datatracker.ietf.org/doc/html/rfc6749#section-4.3)\nOAuth 2 API that returns a [JSON Web Tokens] for \"authenticated\"\nusers.\n",
+        "description": "[Resource Owner Password Credentials Grant](https://datatracker.ietf.org/doc/html/rfc6749#section-4.3) OAuth 2 API that returns a [JSON Web Tokens] for \"authenticated\" users.",
         "tags": ["password", "credentials", "grant", "JWT"],
         "requestBody": {
           "required": true,
@@ -107,6 +123,14 @@
         "responses": {
           "200": {
             "description": "Authentication succeeded.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Prevents caching the response.",
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -173,12 +197,84 @@
         }
       }
     },
+    "/resource": {
+      "post": {
+        "operationId": "post-resource",
+        "summary": "Bearer token resource access",
+        "description": "[OAuth 2 Bearer Token](https://datatracker.ietf.org/doc/html/rfc6749#section-4.3) resource API. Submit a JWT returned by /authorization as a Bearer token to return the request body.",
+        "tags": ["JWT", "Bearer", "resource"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "description": "Resource to echo back in the response. Use any content type and payload; the API will reflect the request content type (or application/octet-stream if none) and body in the response.",
+          "content": {
+            "*/*": {
+              "example": "<title>Hello</title>"
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bearer token validated; returns the request content type (or or application/octet-stream if none) and body.",
+            "content": {
+              "*/*": {
+                "example": "<title>Hello</title>"
+              }
+            }
+          },
+          "401": {
+            "description": "Resource access failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Describes the HTTP authentication method to use to gain access to the resource.",
+                "schema": {
+                  "type": "string",
+                  "examples": [
+                    "Bearer error=\"invalid_request\" error_description=\"no token present in request\"",
+                    "Bearer error=\"invalid_token\" error_description=\"token has invalid claims: token has invalid issuer\""
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "enum": [
+                        "invalid_request",
+                        "invalid_token",
+                        "insufficient_scope"
+                      ],
+                      "description": "An OAuth 2 Bearer token response [error code](https://datatracker.ietf.org/doc/html/rfc6750#section-3.1).",
+                      "example": "invalid_token"
+                    },
+                    "error_description": {
+                      "type": "string",
+                      "description": "A description of the error that cause the resource request to fail.",
+                      "examples": [
+                        "no token present in request",
+                        "token is malformed: token contains an invalid number of segments",
+                        "token has invalid claims: token has invalid issuer",
+                        "token has invalid claims: token has invalid audience"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/.well-known/jwks.json": {
       "get": {
         "tags": ["jwks", "keys", "keyset"],
         "operationId": "get-jwks",
         "summary": "Fetch the JSON Web Key set used to sign tokens returned by the /authorization endpoint.",
-        "description": "Unauthenticated endpoint that returns the public [JSON Web\nKey](https://www.rfc-editor.org/rfc/rfc7517) set generated by dmjwk.\nWill include the public keys for all of the key IDs specified by the\n`DMJWK_KIDS` environment variable.\n",
+        "description": "Unauthenticated endpoint that returns the public [JSON Web Key](https://www.rfc-editor.org/rfc/rfc7517) set generated by dmjwk. Will include the public keys for all of the key IDs specified by the `DMJWK_KIDS` environment variable.",
         "responses": {
           "200": {
             "description": "The JSON Web Key set. dmjwk only generates \"P-256\" elliptic curve keys.",
@@ -278,6 +374,12 @@
     },
     {
       "name": "OpenAPI"
+    },
+    {
+      "name": "Bearer"
+    },
+    {
+      "name": "resource"
     }
   ]
 }

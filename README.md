@@ -3,7 +3,8 @@ dmjwk
 
 dmjwk (pronounced "dumb jock") is a simple demo web server that provides a
 basic [Resource Owner Password Credentials Grant] OAuth 2 flow that returns a
-[JSON Web Tokens] for "authenticated" users. It signs the tokens with a
+[JSON Web Tokens] for "authenticated" users, as well as a [OAuth 2 Bearer
+ Token] API that validates those JWTs. It signs the tokens with a
 memory-persistent [JSON Web Key] set.
 
 > [!CAUTION]
@@ -51,9 +52,18 @@ form='grant_type=password&username=kamala&password=a2FtYWxh'
 curl --cacert ca.pem -d "$form" https://localhost:4433/authorization
 ```
 
-Use the `access_token` field in the returned JSON as a Bearer token in a
-request to a service that uses `https://localhost:4433/.well-known/jwks.json`
-to authenticate requests.
+Use the `access_token` field in the returned JSON as a Bearer token to reflect
+a request to `/resource`:
+
+```sh
+tok=$(curl -s --cacert ca.pem -d "$form" https://localhost:4433/authorization | jq -r .access_token)
+ curl --cacert ca.pem -H "Authorization: Bearer $tok" https://localhost:4433/resource -d '
+HELLO WORLD
+'
+```
+
+Or use the Bearer token for any request to a service that uses
+`https://localhost:4433/.well-known/jwks.json` to authenticate requests.
 
 ## APIs
 
@@ -110,6 +120,19 @@ Example successful response:
 }
 ```
 
+Returns an `application/json` response with http code 400 on authorization
+failure:
+
+```sh
+curl --cacert ca.pem -sd "username=hi" https://localhost:4433/authorization
+```
+```json
+{
+  "error": "invalid_request",
+  "error_description": "missing grant_type"
+}
+```
+
 Form fields:
 
 **`grant_type`**: Type of grant. Must be "password". Required.
@@ -130,6 +153,38 @@ specified by [DMJWK_ISSUER](#dmjwk_issuer). Optional.
 
 **`aud`**: Value to include in the the JWT `aud` field. Overrides the value
 specified by [DMJWK_AUDIENCE](#dmjwk_audience). Optional.
+
+### `POST /resource`
+
+```sh
+form='grant_type=password&username=kamala&password=a2FtYWxh'
+tok=$(curl -s --cacert ca.pem -d "$form" https://localhost:4433/authorization | jq -r .access_token)
+curl --cacert ca.pem -H "Authorization: Bearer $tok" https://localhost:4433/resource -d '
+HELLO WORLD
+'
+```
+```text
+
+HELLO WORLD
+```
+
+Simple [OAuth 2 Bearer Token] resource API. Submit a JWT returned by
+[/authorization](#post-authorization) as a Bearer token and the API will
+reflect back the content type and body of the request. If the request contains
+no content-type, the returned type will be `application/octet-stream`.
+
+Returns an `application/json` response with http code 401 and an
+`WWW-Authenticate` header on authentication failure:
+
+```sh
+curl --cacert ca.pem -H "Authorization: Bearer NONE" https://localhost:4433/resource -d 'Hi'
+```
+```json
+{
+  "error": "invalid_token",
+  "error_description": "token is malformed: token contains an invalid number of segments"
+}
+```
 
 ## Configuration
 
@@ -199,3 +254,5 @@ suffix, such as "300ms", "-1.5h" or "2h45m". Valid time units are "ns", "us"
     "everything curl: CA store in file(s)"
   [Access Token]: https://datatracker.ietf.org/doc/html/rfc6749#section-5
     "RFC 6749 Section 5: Issuing an Access Token"
+  [OAuth 2 Bearer Token]: https://datatracker.ietf.org/doc/html/rfc6749#section-4.3
+    "RFC 6750 --- The OAuth 2.0 Authorization Framework: Bearer Token Usage"

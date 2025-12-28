@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	randy "math/rand"
 	"net"
@@ -25,7 +26,9 @@ import (
 	"time"
 
 	"github.com/MicahParks/jwkset"
+	"github.com/MicahParks/keyfunc/v3"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/golang-jwt/jwt/v5/request"
 	"github.com/kelseyhightower/envconfig"
 )
 
@@ -183,6 +186,9 @@ func newMux(opts *Options, set *jwkset.MemoryJWKSet) (*http.ServeMux, error) {
 	// Setup a handler to "authenticate" a user.
 	mux.Handle("POST /authorization", setupAuth(opts, set))
 
+	// Setup authenticated handlers to echo a "resource".
+	mux.Handle("POST /resource", setupResource(opts, set))
+
 	// Setup a handler for the OpenAPI doc.
 	mux.HandleFunc("GET /openapi.json", func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -257,6 +263,53 @@ func setupAuth(opts *Options, set *jwkset.MemoryJWKSet) http.Handler {
 	})
 }
 
+func setupResource(opts *Options, set jwkset.Storage) http.Handler {
+	key, err := keyfunc.New(keyfunc.Options{Storage: set})
+	if err != nil {
+		// Should not happen; Storage is never nil.
+		panic(err)
+	}
+
+	// Assemble parser options.
+	parseOpts := []jwt.ParserOption{jwt.WithIssuedAt()}
+	if opts.Issuer != "" {
+		parseOpts = append(parseOpts, jwt.WithIssuer(opts.Issuer))
+	}
+
+	if opts.Audience != "" {
+		parseOpts = append(parseOpts, jwt.WithAudience(opts.Audience))
+	}
+
+	// Ready to authenticate.
+	parser := jwt.NewParser(parseOpts...)
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bearer, err := request.BearerExtractor{}.ExtractToken(r)
+		if err != nil {
+			sendAuthErr(w, r, "invalid_request", err)
+			return
+		}
+
+		// Parse, verify, and validate the JWT.
+		_, err = parser.Parse(bearer, key.Keyfunc)
+		if err != nil {
+			sendAuthErr(w, r, "invalid_token", err)
+			return
+		}
+
+		// Return the response body.
+		ct := r.Header.Get("Content-Type")
+		if ct == "" {
+			ct = "application/octet-stream"
+		}
+		w.Header().Add("Content-Type", ct)
+		w.WriteHeader(http.StatusOK)
+		if _, err := io.Copy(w, r.Body); err != nil {
+			slog.ErrorContext(r.Context(), "cannot write response", "error", err)
+		}
+	})
+}
+
 func checkRequest(w http.ResponseWriter, r *http.Request) bool {
 	if err := r.ParseForm(); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -311,6 +364,17 @@ func sendErr(w http.ResponseWriter, r *http.Request, code, msg string) bool {
 		slog.ErrorContext(r.Context(), "cannot write response", "error", err)
 	}
 	return false
+}
+
+func sendAuthErr(w http.ResponseWriter, r *http.Request, msg string, authErr error) {
+	// https://datatracker.ietf.org/doc/html/rfc6750#section-3
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Add("WWW-Authenticate", fmt.Sprintf("Bearer error=%q error_description=%q", msg, authErr))
+	w.WriteHeader(http.StatusUnauthorized)
+	_, err := fmt.Fprintf(w, `{"error": %q, "error_description": %q}`, msg, authErr)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "cannot write response", "error", err)
+	}
 }
 
 func makeJWT(ctx context.Context, opts *Options, set *jwkset.MemoryJWKSet, form url.Values) (string, error) {

@@ -163,7 +163,7 @@ func TestMux(t *testing.T) {
 			makeJWKsRequest(t, mux, set)
 			makeOpenAPIRequest(t, mux)
 
-			// Test authentication.
+			// Test authorization.
 			makeAuthRequest(t, authTest{
 				handler: mux,
 				opts:    &tc.opts,
@@ -571,6 +571,92 @@ func TestSetupAuth(t *testing.T) {
 	}
 }
 
+func TestSetupResource(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		test string
+		opts Options
+		form url.Values
+		body string
+		tok  string
+		mime string
+		code string
+		msg  string
+	}{
+		{
+			test: "no_token",
+			tok:  "omit",
+			code: "invalid_request",
+			msg:  "no token present in request",
+		},
+		{
+			test: "invalid_token",
+			tok:  "not a JWT",
+			code: "invalid_token",
+			msg:  "token is malformed: token contains an invalid number of segments",
+		},
+		{
+			test: "text_success",
+			mime: "text/plain",
+			body: "I am a resource",
+		},
+		{
+			test: "json_success",
+			mime: "application/json",
+			body: `{"go": 1}`,
+		},
+		{
+			test: "xml_success",
+			mime: "application/xml",
+			body: `<foo/>`,
+		},
+		{
+			test: "invalid_issuer",
+			opts: Options{Issuer: "me"},
+			form: url.Values{"iss": []string{"you"}},
+			code: "invalid_token",
+			msg:  "token has invalid claims: token has invalid issuer",
+		},
+		{
+			test: "invalid_audience",
+			opts: Options{Audience: "you"},
+			form: url.Values{"aud": []string{"me"}},
+			code: "invalid_token",
+			msg:  "token has invalid claims: token has invalid audience",
+		},
+	} {
+		t.Run(tc.test, func(t *testing.T) {
+			t.Parallel()
+
+			// Create a keyset.
+			set, err := keyset(&tc.opts)
+			require.NoError(t, err)
+
+			// Test the request.
+			makeResourceRequest(t, resourceTest{
+				handler: setupResource(&tc.opts, set),
+				opts:    &tc.opts,
+				set:     set,
+				form:    tc.form,
+				tok:     tc.tok,
+				body:    tc.body,
+				mime:    tc.mime,
+				code:    tc.code,
+				msg:     tc.msg,
+			})
+		})
+	}
+
+	t.Run("no_storage", func(t *testing.T) {
+		t.Parallel()
+		assert.PanicsWithError(
+			t, "failed keyfunc: no JWK Set storage given in options",
+			func() { setupResource(&Options{}, nil) },
+		)
+	})
+}
+
 func TestServer(t *testing.T) {
 	t.Parallel()
 
@@ -942,6 +1028,18 @@ type authTest struct {
 	msg     string
 }
 
+type resourceTest struct {
+	handler http.Handler
+	opts    *Options
+	set     *jwkset.MemoryJWKSet
+	form    url.Values
+	tok     string
+	body    string
+	mime    string
+	code    string
+	msg     string
+}
+
 func makeAuthRequest(t *testing.T, tc authTest) {
 	t.Helper()
 	a := assert.New(t)
@@ -992,6 +1090,7 @@ func makeAuthRequest(t *testing.T, tc authTest) {
 	a.Equal(kid, tok.Header[jwkset.HeaderKID])
 
 	// Verify the rest of the response.
+	a.Equal("no-store", resp.Header.Get("Cache-Control"))
 	a.Equal("Bearer", res["token_type"])
 	if tc.opts.ExpireAfter > 0 {
 		a.InEpsilon(float64(tc.opts.ExpireAfter/time.Second), res["expires_in"], 0.02)
@@ -999,4 +1098,64 @@ func makeAuthRequest(t *testing.T, tc authTest) {
 		_, ok = res["expires_in"]
 		a.False(ok)
 	}
+}
+
+func makeResourceRequest(t *testing.T, tc resourceTest) {
+	t.Helper()
+	a := assert.New(t)
+	r := require.New(t)
+
+	// Setup header values.
+	var err error
+	if tc.tok == "" {
+		tc.tok, err = makeJWT(t.Context(), tc.opts, tc.set, tc.form)
+		r.NoError(err)
+	}
+
+	// Setup a test request.
+	req := httptest.NewRequestWithContext(
+		t.Context(), http.MethodPost, "/resource",
+		strings.NewReader(tc.body),
+	)
+
+	if tc.tok != "omit" {
+		req.Header.Set("Authorization", "Bearer "+tc.tok)
+	}
+	if tc.mime != "" {
+		req.Header.Set("Content-Type", tc.mime)
+	}
+	w := httptest.NewRecorder()
+
+	tc.handler.ServeHTTP(w, req)
+	resp := w.Result()
+
+	if tc.code != "" {
+		// Should return an error.
+		a.Equal(http.StatusUnauthorized, resp.StatusCode)
+		a.Equal("application/json", resp.Header.Get("Content-Type"))
+		a.Equal(
+			fmt.Sprintf("Bearer error=%q error_description=%q", tc.code, tc.msg),
+			resp.Header.Get("WWW-Authenticate"),
+		)
+		// Build expected response body.
+		exp, err := json.Marshal(map[string]string{
+			"error":             tc.code,
+			"error_description": tc.msg,
+		})
+		r.NoError(err)
+		body, err := io.ReadAll(resp.Body)
+		r.NoError(err)
+		a.JSONEq(string(exp), string(body))
+		return
+	}
+
+	// Validate the response.
+	if tc.mime == "" {
+		tc.mime = "application/octet-stream"
+	}
+	a.Equal(http.StatusOK, resp.StatusCode)
+	a.Equal(tc.mime, resp.Header.Get("Content-Type"))
+	body, err := io.ReadAll(resp.Body)
+	r.NoError(err)
+	a.Equal(tc.body, string(body))
 }
