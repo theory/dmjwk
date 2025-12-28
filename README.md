@@ -27,6 +27,33 @@ dmjwk --version
 dmjwk version v0.1.0 (0903349)
 ```
 
+## Installation
+
+### Source
+
+Use [Go] to compile and install from source:
+
+```sh
+go install github.com/theory/dmjwk@latest
+```
+
+### Docker
+
+Fetch the Docker image to run it locally:
+
+```sh
+docker pull ghcr.io/theory/dmjwk
+```
+
+### Ubi
+
+Install the [universal binary installer (ubi)][ubi] and use it to install
+`dmjwk` and many other tools:
+
+```sh
+ubi --project theory/dmjwk --in ~/bin
+```
+
 ## Quick Start
 
 Start dmjwk with a self-signed certificate:
@@ -38,11 +65,12 @@ env DMJWK_CONFIG_DIR="$(pwd)" DMJWK_PORT=4433 dmjwk
 Or in Docker:
 
 ```sh
+docker run -d -p 4433:443 --name dmjwk --volume .:/etc/dmjwk ghcr.io/theory/dmjwk
 ```
 
-This should create `ca.pem` in the current directory. Use it with your
-favorite HTTP client to make validated requests. For example, to fetch the JWK
-set:
+Either command should create `ca.pem` in the current directory. Use it with
+your favorite HTTP client to make validated requests. For example, to fetch
+the JWK set:
 
 ```sh
 curl --cacert ca.pem https://localhost:4433/.well-known/jwks.json
@@ -254,6 +282,8 @@ suffix, such as "300ms", "-1.5h" or "2h45m". Valid time units are "ns", "us"
     "RFC 7517 JSON Web Key (JWK)"
   [JSON Web Tokens]: https://www.rfc-editor.org/rfc/rfc7519
     "RFC 7519 JSON Web Token (JWT)"
+  [Go]: https://go.dev "The Go Programming Language"
+  [ubi]: https://github.com/houseabsolute/ubi
   [Resource Owner Password Credentials Grant]: https://datatracker.ietf.org/doc/html/rfc6749#section-4.3
   [curl]: https://everything.curl.dev/usingcurl/tls/verify.html#ca-store-in-files
     "everything curl: CA store in file(s)"

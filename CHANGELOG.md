@@ -27,7 +27,7 @@ All notable changes to this project will be documented in this file. It uses the
 ### 🏗️ Build Setup
 
 *   Built with Go
-*   Makes [releases] for 22 platforms
+*   Makes [releases] for 40 platforms
 *   Run [ghrc.io/theory/dmjwk] in Docker
 *   Use `go install` to install from pkg.go.dev
 
