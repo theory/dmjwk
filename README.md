@@ -35,6 +35,11 @@ Start dmjwk with a self-signed certificate:
 env DMJWK_CONFIG_DIR="$(pwd)" DMJWK_PORT=4433 dmjwk
 ```
 
+Or in Docker:
+
+```sh
+```
+
 This should create `ca.pem` in the current directory. Use it with your
 favorite HTTP client to make validated requests. For example, to fetch the JWK
 set:
