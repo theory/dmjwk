@@ -13,10 +13,12 @@ All notable changes to this project will be documented in this file. It uses the
 
 *   Updated the `DMJWK_AUDIENCE` variable to take a comma-delimited list of
     audiences, all of which will be set in the `aud` field of JWTs generated
-    by the `/authorization` API.
+    by the `/authorization` API
 *   Documented that the `aud` parameter to the `/authorization` API may be
     specified multiple times, in which case all of its values will fill the
-    `aud` field of JWT it generates.
+    `aud` field of JWT it generates
+*   Add the contents of the `scope` form field to the `/authorization` API to
+    the resulting JWT in accordance with [RFC 8693]
 
 ### 🏗️ Build Setup
 
@@ -26,8 +28,11 @@ All notable changes to this project will be documented in this file. It uses the
 
 *   Added installation instructions to the [README](README.md)
 *   Added Docker example to the Quick Start in the [README](README.md)
+*   Converted dumb quotes to smart quotes in [openapi.json](openapi.json)
 
   [v0.1.1]: https://github.com/theory/jsonpath/compare/v0.1.0...v0.1.1
+  [RFC 8693]: https://www.rfc-editor.org/rfc/rfc8693#name-json-web-token-claims-and-i
+    "RFC 8693 Section 4: JSON Web Token Claims and Introspection Response Parameters"
 
 ## [v0.1.0] — 2025-12-28
 

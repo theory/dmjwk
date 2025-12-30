@@ -223,6 +223,11 @@ func TestMakeJWT(t *testing.T) {
 			opts: Options{ExpireAfter: time.Hour},
 		},
 		{
+			test: "scope_in_form",
+			form: url.Values{"username": []string{"hello"}, "scope": []string{"hi", "bye"}},
+			opts: Options{ExpireAfter: time.Hour * 24},
+		},
+		{
 			test: "kid_in_form",
 			form: url.Values{"username": []string{"hello"}, "kid": []string{"b"}},
 			opts: Options{ExpireAfter: time.Hour * 24, Kids: []string{"a", "b"}},
@@ -261,50 +266,7 @@ func TestMakeJWT(t *testing.T) {
 			kid, priv := getKey(t, set, &tc.opts, tc.form)
 
 			// Validate the token.
-			tok, err := jwt.Parse(str, func(*jwt.Token) (any, error) {
-				return &priv.PublicKey, nil
-			})
-			r.NoError(err)
-			a.NotNil(tok)
-
-			// KID should be set.
-			a.Equal(kid, tok.Header[jwkset.HeaderKID])
-
-			// Compare claims;
-			str, err = tok.Claims.GetIssuer()
-			r.NoError(err)
-			if iss, ok := tc.form["iss"]; ok {
-				a.Equal(iss[0], str)
-			} else {
-				a.Equal(tc.opts.Issuer, str)
-			}
-
-			str, err = tok.Claims.GetSubject()
-			r.NoError(err)
-			a.Equal(tc.form.Get("username"), str)
-
-			iat, err := tok.Claims.GetIssuedAt()
-			r.NoError(err)
-			a.WithinRange(iat.Time, start, time.Now())
-
-			exp, err := tok.Claims.GetExpirationTime()
-			r.NoError(err)
-			if tc.opts.ExpireAfter > 0 {
-				a.Equal(exp.Time, iat.Add(tc.opts.ExpireAfter))
-			} else {
-				a.Nil(exp)
-			}
-
-			aud, err := tok.Claims.GetAudience()
-			r.NoError(err)
-			switch {
-			case len(tc.form["aud"]) > 0:
-				a.Equal(jwt.ClaimStrings(tc.form["aud"]), aud)
-			case len(tc.opts.Audience) > 0:
-				a.Equal(jwt.ClaimStrings(tc.opts.Audience), aud)
-			default:
-				a.Nil(aud)
-			}
+			validateToken(t, kid, str, priv, &tc.opts, tc.form, start)
 		})
 	}
 }
@@ -552,7 +514,7 @@ func TestSetupAuth(t *testing.T) {
 				"grant_type": []string{"password"},
 				"username":   []string{"theory"},
 				"password":   []string{"dGhlb3J5"},
-				"scope":      []string{"all the things"},
+				"scope":      []string{"edit", "comment"},
 			},
 		},
 	} {
@@ -600,6 +562,10 @@ func TestSetupResource(t *testing.T) {
 			tok:  "not a JWT",
 			code: "invalid_token",
 			msg:  "token is malformed: token contains an invalid number of segments",
+		},
+		{
+			test: "success",
+			body: "whatever",
 		},
 		{
 			test: "text_success",
@@ -1052,6 +1018,7 @@ func makeAuthRequest(t *testing.T, tc authTest) {
 	t.Helper()
 	a := assert.New(t)
 	r := require.New(t)
+	start := time.Now().Truncate(jwt.TimePrecision)
 
 	// Setup a test request.
 	req := httptest.NewRequestWithContext(
@@ -1087,24 +1054,26 @@ func makeAuthRequest(t *testing.T, tc authTest) {
 	// Get the signing key.
 	kid, priv := getKey(t, tc.set, tc.opts, tc.form)
 
-	// Verify the token.
+	// Validate the token.
 	str, ok := res["access_token"].(string)
 	a.True(ok)
-	tok, err := jwt.Parse(str, func(*jwt.Token) (any, error) {
-		return &priv.PublicKey, nil
-	})
-	r.NoError(err)
-	a.NotNil(tok)
-	a.Equal(kid, tok.Header[jwkset.HeaderKID])
+	validateToken(t, kid, str, priv, tc.opts, tc.form, start)
 
 	// Verify the rest of the response.
 	a.Equal("no-store", resp.Header.Get("Cache-Control"))
 	a.Equal("Bearer", res["token_type"])
+
 	if tc.opts.ExpireAfter > 0 {
 		a.InEpsilon(float64(tc.opts.ExpireAfter/time.Second), res["expires_in"], 0.02)
 	} else {
 		_, ok = res["expires_in"]
 		a.False(ok)
+	}
+
+	if tc.form["scope"] != nil {
+		a.Equal(strings.Join(tc.form["scope"], " "), res["scope"])
+	} else {
+		a.Equal("read", res["scope"])
 	}
 }
 
@@ -1166,4 +1135,69 @@ func makeResourceRequest(t *testing.T, tc resourceTest) {
 	body, err := io.ReadAll(resp.Body)
 	r.NoError(err)
 	a.Equal(tc.body, string(body))
+}
+
+func validateToken(
+	t *testing.T,
+	kid, str string,
+	priv *ecdsa.PrivateKey,
+	opts *Options,
+	form url.Values,
+	start time.Time,
+) {
+	t.Helper()
+	a := assert.New(t)
+	r := require.New(t)
+	// Validate the token.
+	claims := &rfc8693Claims{}
+	tok, err := jwt.ParseWithClaims(str, claims, func(*jwt.Token) (any, error) {
+		return &priv.PublicKey, nil
+	})
+	r.NoError(err)
+	a.NotNil(tok)
+
+	// KID should be set.
+	a.Equal(kid, tok.Header[jwkset.HeaderKID])
+
+	// Compare claims.
+	str, err = claims.GetIssuer()
+	r.NoError(err)
+	if iss, ok := form["iss"]; ok {
+		a.Equal(iss[0], str)
+	} else {
+		a.Equal(opts.Issuer, str)
+	}
+
+	str, err = claims.GetSubject()
+	r.NoError(err)
+	a.Equal(form.Get("username"), str)
+
+	iat, err := claims.GetIssuedAt()
+	r.NoError(err)
+	a.WithinRange(iat.Time, start, time.Now())
+
+	exp, err := claims.GetExpirationTime()
+	r.NoError(err)
+	if opts.ExpireAfter > 0 {
+		a.Equal(exp.Time, iat.Add(opts.ExpireAfter))
+	} else {
+		a.Nil(exp)
+	}
+
+	aud, err := claims.GetAudience()
+	r.NoError(err)
+	switch {
+	case len(form["aud"]) > 0:
+		a.Equal(jwt.ClaimStrings(form["aud"]), aud)
+	case len(opts.Audience) > 0:
+		a.Equal(jwt.ClaimStrings(opts.Audience), aud)
+	default:
+		a.Nil(aud)
+	}
+
+	if len(form["scope"]) > 0 {
+		a.Equal(strings.Join(form["scope"], " "), claims.Scope)
+	} else {
+		a.Empty(claims.Scope)
+	}
 }

@@ -141,8 +141,8 @@ curl --cacert ca.pem -d "$form" https://localhost:4433/authorization
 ```
 
 [Resource Owner Password Credentials Grant] API. Validates password
-authorization for a given username and returns an OAuth 2.0 [Access Token].
-Example successful response:
+authorization for a given username and returns an OAuth 2.0 [Access Token]
+with optional [RFC 8693 claims]. Example successful response:
 
 ```json
 {
@@ -179,7 +179,8 @@ without trailing equal signs. Required.
 **`kid`**: The ID of the Key to use to sign the JWT. Must be one of the values
 specified by [DMJWK_KIDS](#dmjwk_kids). Optional.
 
-**`scope`**: Value to include in the `scope` field of the response. Optional.
+**`scope`**: Value to include in the `scope` field of the JWT and the
+response. Specify multiple times for multiple audiences. Optional.
 
 **`iss`**: Value to include in the the JWT `iss` field. Overrides the value
 specified by [DMJWK_ISSUER](#dmjwk_issuer). Optional.
@@ -297,5 +298,7 @@ suffix, such as "300ms", "-1.5h" or "2h45m". Valid time units are "ns", "us"
     "everything curl: CA store in file(s)"
   [Access Token]: https://datatracker.ietf.org/doc/html/rfc6749#section-5
     "RFC 6749 Section 5: Issuing an Access Token"
+  [RFC 8693 claims]: https://www.rfc-editor.org/rfc/rfc8693#name-json-web-token-claims-and-i
+    "RFC 8693 Section 4: JSON Web Token Claims and Introspection Response Parameters"
   [OAuth 2 Bearer Token]: https://datatracker.ietf.org/doc/html/rfc6750
     "RFC 6750 --- The OAuth 2.0 Authorization Framework: Bearer Token Usage"

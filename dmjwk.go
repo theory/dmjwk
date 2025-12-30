@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"strings"
 	"syscall"
 	"time"
 
@@ -216,10 +217,11 @@ func newResponse(opts *Options, tok string, form url.Values) *accessResponse {
 		Token:     tok,
 		Type:      tokenType,
 		ExpiresIn: int64(opts.ExpireAfter / time.Second),
-		Scope:     form.Get("scope"),
 	}
 
-	if body.Scope == "" {
+	if form["scope"] != nil {
+		body.Scope = strings.Join(form["scope"], " ")
+	} else {
 		// https://oauth.net/2/scope/
 		body.Scope = "read"
 	}
@@ -377,6 +379,16 @@ func sendAuthErr(w http.ResponseWriter, r *http.Request, msg string, authErr err
 	}
 }
 
+// rfc8693Claims extends [jwt.RegisteredClaims] to add the rfc8693 claims.
+type rfc8693Claims struct {
+	jwt.RegisteredClaims
+
+	Scope           string            `json:"scope,omitempty"`
+	Actor           map[string]string `json:"act,omitempty"`
+	ClientID        string            `json:"client_id,omitempty"`
+	AuthorizedActor map[string]string `json:"may_act,omitempty"`
+}
+
 func makeJWT(ctx context.Context, opts *Options, set *jwkset.MemoryJWKSet, form url.Values) (string, error) {
 	// Determine which key to use.
 	var kid string
@@ -391,12 +403,14 @@ func makeJWT(ctx context.Context, opts *Options, set *jwkset.MemoryJWKSet, form 
 	}
 
 	now := time.Now()
-	claims := &jwt.RegisteredClaims{
-		Issuer:   form.Get("iss"),
-		Subject:  form.Get("username"),
-		IssuedAt: jwt.NewNumericDate(now),
-		ID:       randID(),
-	}
+	claims := rfc8693Claims{
+		jwt.RegisteredClaims{
+			Issuer:   form.Get("iss"),
+			Subject:  form.Get("username"),
+			IssuedAt: jwt.NewNumericDate(now),
+			ID:       randID(),
+		},
+		"", nil, "", nil}
 	if opts.ExpireAfter > 0 {
 		claims.ExpiresAt = jwt.NewNumericDate(now.Add(opts.ExpireAfter))
 	}
@@ -407,6 +421,12 @@ func makeJWT(ctx context.Context, opts *Options, set *jwkset.MemoryJWKSet, form 
 		claims.Audience = jwt.ClaimStrings(form["aud"])
 	} else if len(opts.Audience) > 0 {
 		claims.Audience = jwt.ClaimStrings(opts.Audience)
+	}
+
+	// https://www.rfc-editor.org/rfc/rfc8693#section-4.2
+	// https://datatracker.ietf.org/doc/html/rfc6749#section-3.3
+	if form["scope"] != nil {
+		claims.Scope = strings.Join(form["scope"], " ")
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
 	tok.Header[jwkset.HeaderKID] = kid
