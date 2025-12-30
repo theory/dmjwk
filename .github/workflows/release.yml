@@ -2,6 +2,7 @@ name: 🚀 Release
 on:
   push:
     branches-ignore: [wip/**]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
 permissions:
   contents: write
 jobs:

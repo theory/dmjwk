@@ -7,7 +7,7 @@ All notable changes to this project will be documented in this file. It uses the
   [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
     "Semantic Versioning 2.0.0"
 
-## [v0.1.1] — Unreleased
+## [v0.2.0] — 2025-12-30
 
 ### ⚡ Improvements
 
@@ -34,7 +34,7 @@ All notable changes to this project will be documented in this file. It uses the
 *   Added Docker example to the Quick Start in the [README](README.md)
 *   Converted dumb quotes to smart quotes in [openapi.json](openapi.json)
 
-  [v0.1.1]: https://github.com/theory/jsonpath/compare/v0.1.0...v0.1.1
+  [v0.1.1]: https://github.com/theory/jsonpath/compare/v0.1.0...v0.2.0
   [RFC 8693]: https://www.rfc-editor.org/rfc/rfc8693#name-json-web-token-claims-and-i
     "RFC 8693 Section 4: JSON Web Token Claims and Introspection Response Parameters"
 
