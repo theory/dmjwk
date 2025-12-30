@@ -45,7 +45,7 @@ type Options struct {
 	ConfigDir   string        `default:"/etc/dmjwk" split_words:"true"`
 	Kids        []string      `split_words:"true"`
 	Issuer      string        `split_words:"true"`
-	Audience    string        `split_words:"true"`
+	Audience    []string      `split_words:"true"`
 	ExpireAfter time.Duration `default:"1h"         split_words:"true"`
 	Port        uint32        `default:"443"        split_words:"true"`
 	CertPath    string        `split_words:"true"`
@@ -276,8 +276,8 @@ func setupResource(opts *Options, set jwkset.Storage) http.Handler {
 		parseOpts = append(parseOpts, jwt.WithIssuer(opts.Issuer))
 	}
 
-	if opts.Audience != "" {
-		parseOpts = append(parseOpts, jwt.WithAudience(opts.Audience))
+	if len(opts.Audience) > 0 {
+		parseOpts = append(parseOpts, jwt.WithAudience(opts.Audience...))
 	}
 
 	// Ready to authenticate.
@@ -405,8 +405,8 @@ func makeJWT(ctx context.Context, opts *Options, set *jwkset.MemoryJWKSet, form 
 	}
 	if form["aud"] != nil {
 		claims.Audience = jwt.ClaimStrings(form["aud"])
-	} else if opts.Audience != "" {
-		claims.Audience = jwt.ClaimStrings{opts.Audience}
+	} else if len(opts.Audience) > 0 {
+		claims.Audience = jwt.ClaimStrings(opts.Audience)
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
 	tok.Header[jwkset.HeaderKID] = kid

@@ -207,14 +207,18 @@ func TestMakeJWT(t *testing.T) {
 		{
 			test: "iss_and_aud",
 			form: url.Values{"username": []string{"theory"}},
-			opts: Options{ExpireAfter: time.Hour, Issuer: "me", Audience: "people"},
+			opts: Options{
+				ExpireAfter: time.Hour,
+				Issuer:      "me",
+				Audience:    []string{"people", "pets"},
+			},
 		},
 		{
 			test: "form_iss_and_aud",
 			form: url.Values{
 				"username": []string{"theory"},
 				"iss":      []string{"authority"},
-				"aud":      []string{"pancakes"},
+				"aud":      []string{"pancakes", "onions"},
 			},
 			opts: Options{ExpireAfter: time.Hour},
 		},
@@ -228,7 +232,7 @@ func TestMakeJWT(t *testing.T) {
 			form: url.Values{"username": []string{"❤️ & 🚀"}},
 			opts: Options{
 				Issuer:      "test",
-				Audience:    "everyone",
+				Audience:    []string{"everyone"},
 				ExpireAfter: time.Hour,
 				Kids:        []string{"kiddo"},
 			},
@@ -293,11 +297,12 @@ func TestMakeJWT(t *testing.T) {
 
 			aud, err := tok.Claims.GetAudience()
 			r.NoError(err)
-			if param, ok := tc.form["aud"]; ok {
-				a.Equal(jwt.ClaimStrings{param[0]}, aud)
-			} else if tc.opts.Audience != "" {
-				a.Equal(jwt.ClaimStrings{tc.opts.Audience}, aud)
-			} else {
+			switch {
+			case len(tc.form["aud"]) > 0:
+				a.Equal(jwt.ClaimStrings(tc.form["aud"]), aud)
+			case len(tc.opts.Audience) > 0:
+				a.Equal(jwt.ClaimStrings(tc.opts.Audience), aud)
+			default:
 				a.Nil(aud)
 			}
 		})
@@ -620,7 +625,7 @@ func TestSetupResource(t *testing.T) {
 		},
 		{
 			test: "invalid_audience",
-			opts: Options{Audience: "you"},
+			opts: Options{Audience: []string{"you"}},
 			form: url.Values{"aud": []string{"me"}},
 			code: "invalid_token",
 			msg:  "token has invalid claims: token has invalid audience",

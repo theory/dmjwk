@@ -9,6 +9,15 @@ All notable changes to this project will be documented in this file. It uses the
 
 ## [v0.1.1] — Unreleased
 
+### ⚡ Improvements
+
+*   Updated the `DMJWK_AUDIENCE` variable to take a comma-delimited list of
+    audiences, all of which will be set in the `aud` field of JWTs generated
+    by the `/authorization` API.
+*   Documented that the `aud` parameter to the `/authorization` API may be
+    specified multiple times, in which case all of its values will fill the
+    `aud` field of JWT it generates.
+
 ### 🏗️ Build Setup
 
 *   Added CI workflows for FreeBSD, OpenBSD, and NetBSD on amd64 and arm64
