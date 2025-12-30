@@ -76,7 +76,7 @@ the JWK set:
 curl --cacert ca.pem https://localhost:4433/.well-known/jwks.json
 ```
 
-To fetch a JWT signed by the first key in the JWK set, make a
+To fetch a JWT signed by the first key in the JWK set, make an
 `application/x-www-form-urlencoded` POST with the required `grant_type`,
 `username`, and `password` fields:
 
@@ -166,7 +166,7 @@ curl --cacert ca.pem -sd "username=hi" https://localhost:4433/authorization
 }
 ```
 
-Form fields:
+### Form fields
 
 **`grant_type`**: Type of grant. Must be "password". Required.
 
@@ -218,6 +218,12 @@ curl --cacert ca.pem -H "Authorization: Bearer NONE" https://localhost:4433/reso
   "error_description": "token is malformed: token contains an invalid number of segments"
 }
 ```
+
+If dmjwk starts with [DMJWK_ISSUER](#dmjwk_issuer) and/or
+[DMJWK_AUDIENCE](#dmjwk_audience) configured, validation will require tokens
+contain these values. These values will be set in
+[authorization](#post-authorization)-JWTs unless overridden by the `iss`
+and/or `aud` form parameters.
 
 ## Configuration
 
@@ -289,5 +295,5 @@ suffix, such as "300ms", "-1.5h" or "2h45m". Valid time units are "ns", "us"
     "everything curl: CA store in file(s)"
   [Access Token]: https://datatracker.ietf.org/doc/html/rfc6749#section-5
     "RFC 6749 Section 5: Issuing an Access Token"
-  [OAuth 2 Bearer Token]: https://datatracker.ietf.org/doc/html/rfc6749#section-4.3
+  [OAuth 2 Bearer Token]: https://datatracker.ietf.org/doc/html/rfc6750
     "RFC 6750 --- The OAuth 2.0 Authorization Framework: Bearer Token Usage"
