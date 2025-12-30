@@ -118,11 +118,12 @@ func TestMux(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		test string
-		opts Options
-		form url.Values
-		code string
-		msg  string
+		test   string
+		opts   Options
+		form   url.Values
+		client string
+		code   string
+		msg    string
 	}{
 		{
 			test: "no_grant_type",
@@ -133,6 +134,16 @@ func TestMux(t *testing.T) {
 		{
 			test: "success",
 			opts: Options{Kids: []string{"hello"}},
+			form: url.Values{
+				"grant_type": []string{"password"},
+				"username":   []string{"theory"},
+				"password":   []string{"dGhlb3J5"},
+			},
+		},
+		{
+			test:   "success_with_basic_auth",
+			opts:   Options{Kids: []string{"hello"}},
+			client: "some client",
 			form: url.Values{
 				"grant_type": []string{"password"},
 				"username":   []string{"theory"},
@@ -228,6 +239,11 @@ func TestMakeJWT(t *testing.T) {
 			opts: Options{ExpireAfter: time.Hour * 24},
 		},
 		{
+			test: "client_id_in_form",
+			form: url.Values{"username": []string{"hello"}, "client_id": []string{"big client"}},
+			opts: Options{ExpireAfter: time.Hour * 24},
+		},
+		{
 			test: "kid_in_form",
 			form: url.Values{"username": []string{"hello"}, "kid": []string{"b"}},
 			opts: Options{ExpireAfter: time.Hour * 24, Kids: []string{"a", "b"}},
@@ -258,7 +274,8 @@ func TestMakeJWT(t *testing.T) {
 			r.NoError(err)
 
 			// Make the JWT.
-			str, err := makeJWT(t.Context(), &tc.opts, set, tc.form)
+			req := &http.Request{PostForm: tc.form}
+			str, err := makeJWT(t.Context(), &tc.opts, set, req)
 			r.NoError(err)
 			a.NotEmpty(str)
 
@@ -266,7 +283,7 @@ func TestMakeJWT(t *testing.T) {
 			kid, priv := getKey(t, set, &tc.opts, tc.form)
 
 			// Validate the token.
-			validateToken(t, kid, str, priv, &tc.opts, tc.form, start)
+			validateToken(t, kid, str, priv, &tc.opts, req, start)
 		})
 	}
 }
@@ -477,11 +494,12 @@ func TestSetupAuth(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		test string
-		opts Options
-		form url.Values
-		code string
-		msg  string
+		test   string
+		opts   Options
+		client string
+		form   url.Values
+		code   string
+		msg    string
 	}{
 		{
 			test: "no_grant_type",
@@ -509,12 +527,31 @@ func TestSetupAuth(t *testing.T) {
 			},
 		},
 		{
+			test:   "success_with_basic_auth",
+			opts:   Options{ExpireAfter: time.Hour},
+			client: "so basic",
+			form: url.Values{
+				"grant_type": []string{"password"},
+				"username":   []string{"theory"},
+				"password":   []string{"dGhlb3J5"},
+			},
+		},
+		{
 			test: "success_with_scope",
 			form: url.Values{
 				"grant_type": []string{"password"},
 				"username":   []string{"theory"},
 				"password":   []string{"dGhlb3J5"},
 				"scope":      []string{"edit", "comment"},
+			},
+		},
+		{
+			test: "success_with_client_id",
+			form: url.Values{
+				"grant_type": []string{"password"},
+				"username":   []string{"theory"},
+				"password":   []string{"dGhlb3J5"},
+				"client_id":  []string{"whatever"},
 			},
 		},
 	} {
@@ -531,6 +568,7 @@ func TestSetupAuth(t *testing.T) {
 				opts:    &tc.opts,
 				set:     set,
 				form:    tc.form,
+				client:  tc.client,
 				code:    tc.code,
 				msg:     tc.msg,
 			})
@@ -998,6 +1036,7 @@ type authTest struct {
 	opts    *Options
 	set     *jwkset.MemoryJWKSet
 	form    url.Values
+	client  string
 	code    string
 	msg     string
 }
@@ -1026,6 +1065,9 @@ func makeAuthRequest(t *testing.T, tc authTest) {
 		strings.NewReader(tc.form.Encode()),
 	)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if tc.client != "" {
+		req.SetBasicAuth(tc.client, "")
+	}
 	w := httptest.NewRecorder()
 
 	tc.handler.ServeHTTP(w, req)
@@ -1057,7 +1099,7 @@ func makeAuthRequest(t *testing.T, tc authTest) {
 	// Validate the token.
 	str, ok := res["access_token"].(string)
 	a.True(ok)
-	validateToken(t, kid, str, priv, tc.opts, tc.form, start)
+	validateToken(t, kid, str, priv, tc.opts, req, start)
 
 	// Verify the rest of the response.
 	a.Equal("no-store", resp.Header.Get("Cache-Control"))
@@ -1085,7 +1127,7 @@ func makeResourceRequest(t *testing.T, tc resourceTest) {
 	// Setup header values.
 	var err error
 	if tc.tok == "" {
-		tc.tok, err = makeJWT(t.Context(), tc.opts, tc.set, tc.form)
+		tc.tok, err = makeJWT(t.Context(), tc.opts, tc.set, &http.Request{PostForm: tc.form})
 		r.NoError(err)
 	}
 
@@ -1142,13 +1184,15 @@ func validateToken(
 	kid, str string,
 	priv *ecdsa.PrivateKey,
 	opts *Options,
-	form url.Values,
+	req *http.Request,
 	start time.Time,
 ) {
 	t.Helper()
 	a := assert.New(t)
 	r := require.New(t)
-	// Validate the token.
+	form := req.PostForm
+
+	// Parse the token.
 	claims := &rfc8693Claims{}
 	tok, err := jwt.ParseWithClaims(str, claims, func(*jwt.Token) (any, error) {
 		return &priv.PublicKey, nil
@@ -1199,5 +1243,11 @@ func validateToken(
 		a.Equal(strings.Join(form["scope"], " "), claims.Scope)
 	} else {
 		a.Empty(claims.Scope)
+	}
+
+	if u, _, ok := req.BasicAuth(); ok {
+		a.Equal(u, claims.ClientID)
+	} else {
+		a.Equal(form.Get("client_id"), claims.ClientID)
 	}
 }

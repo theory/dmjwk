@@ -140,9 +140,10 @@ form='grant_type=password&username=kamala&password=a2FtYWxh'
 curl --cacert ca.pem -d "$form" https://localhost:4433/authorization
 ```
 
-[Resource Owner Password Credentials Grant] API. Validates password
-authorization for a given username and returns an OAuth 2.0 [Access Token]
-with optional [RFC 8693 claims]. Example successful response:
+[Resource Owner Password Credentials Grant] API. Client ID basic auth header
+optional. Validates password authorization for a given username and returns an
+OAuth 2.0 [Access Token] with optional [RFC 8693 claims]. Example successful
+response:
 
 ```json
 {
@@ -176,11 +177,14 @@ the JWT `sub` field. Required.
 **`password`**: Password. Authentication succeeds base64-encoded username
 without trailing equal signs. Required.
 
-**`kid`**: The ID of the Key to use to sign the JWT. Must be one of the values
-specified by [DMJWK_KIDS](#dmjwk_kids). Optional.
-
 **`scope`**: Value to include in the `scope` field of the JWT and the
 response. Specify multiple times for multiple audiences. Optional.
+
+**`client_id`**: Value to include in the `client_id` field of the JWT. Used
+only when no for requests without Basic Authentication. Optional.
+
+**`kid`**: The ID of the Key to use to sign the JWT. Must be one of the values
+specified by [DMJWK_KIDS](#dmjwk_kids). Optional.
 
 **`iss`**: Value to include in the the JWT `iss` field. Overrides the value
 specified by [DMJWK_ISSUER](#dmjwk_issuer). Optional.

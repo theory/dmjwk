@@ -17,8 +17,12 @@ All notable changes to this project will be documented in this file. It uses the
 *   Documented that the `aud` parameter to the `/authorization` API may be
     specified multiple times, in which case all of its values will fill the
     `aud` field of JWT it generates
-*   Add the contents of the `scope` form field to the `/authorization` API to
+*   Added the contents of the `scope` form field to the `/authorization` API to
     the resulting JWT in accordance with [RFC 8693]
+*   Added never-failing Basic Auth to the `/authorization` API that sets the JWT
+    `client_id` claim to the username.
+*   Added the `client_id` field to the `/authorization` API that sets the JWT
+    `client_id` claim unless Basic auth provides it.
 
 ### 🏗️ Build Setup
 

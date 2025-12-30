@@ -243,7 +243,7 @@ func setupAuth(opts *Options, set *jwkset.MemoryJWKSet) http.Handler {
 		}
 
 		// Generate JWT.
-		tok, err := makeJWT(r.Context(), opts, set, r.PostForm)
+		tok, err := makeJWT(r.Context(), opts, set, r)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			sendErr(w, r, "invalid_request", err.Error())
@@ -389,7 +389,9 @@ type rfc8693Claims struct {
 	AuthorizedActor map[string]string `json:"may_act,omitempty"`
 }
 
-func makeJWT(ctx context.Context, opts *Options, set *jwkset.MemoryJWKSet, form url.Values) (string, error) {
+func makeJWT(ctx context.Context, opts *Options, set *jwkset.MemoryJWKSet, req *http.Request) (string, error) {
+	form := req.PostForm
+
 	// Determine which key to use.
 	var kid string
 	if form.Has("kid") {
@@ -404,13 +406,14 @@ func makeJWT(ctx context.Context, opts *Options, set *jwkset.MemoryJWKSet, form 
 
 	now := time.Now()
 	claims := rfc8693Claims{
-		jwt.RegisteredClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:   form.Get("iss"),
 			Subject:  form.Get("username"),
 			IssuedAt: jwt.NewNumericDate(now),
 			ID:       randID(),
 		},
-		"", nil, "", nil}
+		ClientID: form.Get("client_id"),
+	}
 	if opts.ExpireAfter > 0 {
 		claims.ExpiresAt = jwt.NewNumericDate(now.Add(opts.ExpireAfter))
 	}
@@ -423,11 +426,17 @@ func makeJWT(ctx context.Context, opts *Options, set *jwkset.MemoryJWKSet, form 
 		claims.Audience = jwt.ClaimStrings(opts.Audience)
 	}
 
+	// https://datatracker.ietf.org/doc/html/rfc6749#section-2.3.1
+	if u, _, ok := req.BasicAuth(); ok {
+		claims.ClientID = u
+	}
+
 	// https://www.rfc-editor.org/rfc/rfc8693#section-4.2
 	// https://datatracker.ietf.org/doc/html/rfc6749#section-3.3
 	if form["scope"] != nil {
 		claims.Scope = strings.Join(form["scope"], " ")
 	}
+
 	tok := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
 	tok.Header[jwkset.HeaderKID] = kid
 	return tok.SignedString(key.Key())

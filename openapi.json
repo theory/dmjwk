@@ -19,6 +19,11 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT"
+      },
+      "basicAuth": {
+        "description": "OAuth 2 Client Basic authentication",
+        "type": "http",
+        "scheme": "basic"
       }
     }
   },
@@ -53,7 +58,8 @@
       "post": {
         "operationId": "post-auth",
         "summary": "Password-based authentication and JWK-issuing API",
-        "description": "[Resource Owner Password Credentials Grant](https://datatracker.ietf.org/doc/html/rfc6749#section-4.3) OAuth 2 API that returns a [JSON Web Tokens] with optional [RFC 8693 claims](https://www.rfc-editor.org/rfc/rfc8693#name-json-web-token-claims-and-i for “authenticated” users.",
+        "description": "[Resource Owner Password Credentials Grant](https://datatracker.ietf.org/doc/html/rfc6749#section-4.3) OAuth 2 API that returns a [JSON Web Tokens] with optional [RFC 8693 claims](https://www.rfc-editor.org/rfc/rfc8693#name-json-web-token-claims-and-i for “authenticated” users. Client ID basic auth is optional; it never fails, but sets the username in the `client_id` JWT claim.",
+        "security": [{ "basicAuth": [] }],
         "tags": ["password", "credentials", "grant", "JWT"],
         "requestBody": {
           "required": true,
@@ -87,19 +93,26 @@
                       "ZG1qd2suZXhhbXBsZS9hcHBzL2NsaWVudA"
                     ]
                   },
-                  "kid": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 1024,
-                    "description": "The ID of the Key to use to sign the JWT. Must be one of the values specified in the `DMJWK_KIDS` environment variable on service start.",
-                    "examples": ["main", "big-kid", "Bart"]
-                  },
                   "scope": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 1024,
                     "description": "Value to include in the `scope` field of the JWT and the response. Specify multiple times for multiple scopes.",
                     "examples": ["read", "write"]
+                  },
+                  "client_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024,
+                    "description": "Value to include in the `client_id` field of the JWT. Ignored in favor of the basic auth username.",
+                    "examples": ["demo-client"]
+                  },
+                  "kid": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024,
+                    "description": "The ID of the Key to use to sign the JWT. Must be one of the values specified in the `DMJWK_KIDS` environment variable on service start.",
+                    "examples": ["main", "big-kid", "Bart"]
                   },
                   "iss": {
                     "type": "string",
