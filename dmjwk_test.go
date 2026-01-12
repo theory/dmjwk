@@ -355,6 +355,12 @@ func TestCheckRequest(t *testing.T) {
 			msg:  "missing grant_type",
 		},
 		{
+			test: "empty_grant_type",
+			form: url.Values{"grant_type": []string{""}},
+			code: "invalid_request",
+			msg:  "missing grant_type",
+		},
+		{
 			test: "too_many_grant_type",
 			form: url.Values{"grant_type": []string{"foo", "bar"}},
 			code: "invalid_request",
@@ -373,10 +379,29 @@ func TestCheckRequest(t *testing.T) {
 			msg:  "missing username or password",
 		},
 		{
+			test: "empty_username",
+			form: url.Values{
+				"grant_type": []string{"password"},
+				"username":   []string{""},
+			},
+			code: "invalid_request",
+			msg:  "missing username or password",
+		},
+		{
 			test: "no_password",
 			form: url.Values{
 				"grant_type": []string{"password"},
 				"username":   []string{"theory"},
+			},
+			code: "invalid_request",
+			msg:  "missing username or password",
+		},
+		{
+			test: "empty_password",
+			form: url.Values{
+				"grant_type": []string{"password"},
+				"username":   []string{"theory"},
+				"password":   []string{""},
 			},
 			code: "invalid_request",
 			msg:  "missing username or password",

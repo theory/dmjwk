@@ -320,7 +320,7 @@ func checkRequest(w http.ResponseWriter, r *http.Request) bool {
 
 	// Inspect the request.
 	// https://datatracker.ietf.org/doc/html/rfc6749#section-5.2
-	if !r.Form.Has("grant_type") {
+	if r.Form.Get("grant_type") == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		return sendErr(w, r, "invalid_request", "missing grant_type")
 	}
@@ -338,7 +338,7 @@ func checkRequest(w http.ResponseWriter, r *http.Request) bool {
 	}
 
 	// https://datatracker.ietf.org/doc/html/rfc6749#section-5.2
-	if !r.Form.Has("username") || !r.Form.Has("password") {
+	if r.Form.Get("username") == "" || r.Form.Get("password") == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		return sendErr(w, r, "invalid_request", "missing username or password")
 	}

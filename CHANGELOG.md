@@ -9,6 +9,11 @@ All notable changes to this project will be documented in this file. It uses the
 
 ## [v0.2.1] — Unreleased
 
+### 🐞 Bug Fixes
+
+*   Updated the `/authorization` API to reject empty grant type, username, and
+    password values.
+
   [v0.2.1]: https://github.com/theory/jsonpath/compare/v0.2.0...v0.2.1
 
 ## [v0.2.0] — 2025-12-30
