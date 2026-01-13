@@ -2,7 +2,7 @@ GO       ?= go
 GOOS     ?= $(word 1,$(subst /, ,$(word 4, $(shell $(GO) version))))
 GOARCH   ?= $(word 2,$(subst /, ,$(word 4, $(shell $(GO) version))))
 PLATFORM := $(GOOS)-$(GOARCH)
-VERSION  := v0.2.1
+VERSION  := v0.2.2-dev
 
 export VERSION GOOS GOARCH
 # https://github.com/xaionaro/documentation/blob/master/golang/reduce-binary-size.md
