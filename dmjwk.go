@@ -497,7 +497,7 @@ var b32 = base32.NewEncoding("123456789abcdefghijkmnopqrstuvwx").WithPadding(bas
 func randID() string {
 	const int64Size = 8
 	b := make([]byte, int64Size)
-	//nolint:gosec // disable G115,G404
+	//nolint:gosec // disable G404
 	binary.BigEndian.PutUint64(b, uint64(randy.Int63()))
 	return b32.EncodeToString(b)
 }

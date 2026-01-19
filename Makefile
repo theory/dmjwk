@@ -86,7 +86,7 @@ brew-lint-depends:
 
 .PHONY: debian-lint-depends # Install linting tools on Debian
 debian-lint-depends:
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sudo sh -s -- -b /usr/bin v2.7.2
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sudo sh -s -- -b /usr/bin v2.8.0
 	curl -fsSL https://quobix.com/scripts/install_vacuum.sh | sudo sh
 
 ## .git/hooks/pre-commit: Install the pre-commit hook
