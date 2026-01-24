@@ -7,7 +7,15 @@ All notable changes to this project will be documented in this file. It uses the
   [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
     "Semantic Versioning 2.0.0"
 
-## [v0.2.2] — Unreleased
+## [v0.2.2] — 2026-01-24
+
+⬆️ Dependency Updates
+
+*   Upgraded to latest version of `golang.org/x/time`.
+
+🏗️ Build Setup
+
+*   Added a test for server shutdown timeout.
 
   [v0.2.2]: https://github.com/theory/jsonpath/compare/v0.2.1...v0.2.2
 
