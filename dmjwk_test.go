@@ -771,7 +771,7 @@ func TestRun(t *testing.T) {
 	for _, tc := range []struct {
 		test    string
 		opts    Options
-		sig     func(stop chan os.Signal, serveErr chan error)
+		sig     func(*testing.T, chan os.Signal, chan error, string, http.Client)
 		timeout time.Duration
 		exp     string
 		err     string
@@ -779,7 +779,8 @@ func TestRun(t *testing.T) {
 	}{
 		{
 			test: "interrupt",
-			sig: func(stop chan os.Signal, _ chan error) {
+			sig: func(t *testing.T, stop chan os.Signal, _ chan error, _ string, _ http.Client) {
+				t.Helper()
 				stop <- os.Interrupt
 			},
 			timeout: 5 * time.Second,
@@ -789,27 +790,35 @@ func TestRun(t *testing.T) {
 				`{"level":"INFO","msg":"server shut down"}`,
 			},
 		},
-		/*
-			// XXX This should cause the shutdown to fail, but on most platforms
-			// does not. Would need to set something up to keep it busy long
-			// enough for the shutdown to fail.
-			{
-				test: "timeout",
-				sig: func(stop chan os.Signal, _ chan error) {
-					stop <- os.Interrupt
-				},
-				timeout: -1,
-				exp:     "server shutdown failed",
-				log: []string{
-					`{"level":"INFO","msg":"server starting","address":":0"}`,
-					`{"level":"INFO","msg":"server shutting down","timeout":-1}`,
-					`{"level":"ERROR","msg":"server shutdown failed","error":"context deadline exceeded"}`,
-				},
+		{
+			test: "timeout",
+			sig: func(t *testing.T, stop chan os.Signal, _ chan error, url string, client http.Client) {
+				t.Helper()
+				// Hold a request open.
+				req, err := http.NewRequestWithContext(
+					t.Context(), http.MethodGet, url+"/openapi.json", holdOpen{},
+				)
+				require.NoError(t, err)
+				go func(client http.Client, req *http.Request) {
+					//nolint:bodyclose
+					_, _ = client.Do(req)
+				}(client, req)
+				time.Sleep(10 * time.Millisecond)
+				stop <- os.Interrupt
 			},
-		*/
+			timeout: -1,
+			exp:     "server shutdown failed",
+			err:     "context deadline exceeded",
+			log: []string{
+				`{"level":"INFO","msg":"server starting","address":":0"}`,
+				`{"level":"INFO","msg":"server shutting down","timeout":-1}`,
+				`{"level":"ERROR","msg":"server shutdown failed","error":"context deadline exceeded"}`,
+			},
+		},
 		{
 			test: "serve_error",
-			sig: func(_ chan os.Signal, serveErr chan error) {
+			sig: func(t *testing.T, _ chan os.Signal, serveErr chan error, _ string, _ http.Client) {
+				t.Helper()
 				serveErr <- errors.New("ouch")
 			},
 			exp:     "server failed",
@@ -880,10 +889,11 @@ func TestRun(t *testing.T) {
 			})
 
 			// Poll for the service to start.
-			waitForStart(t, pool, l)
+			url, client := makeClient(t, pool, l)
+			waitForStart(t, url, client)
 
 			// Send the signal and wait for the server to finish.
-			tc.sig(cs, serveErr)
+			tc.sig(t, cs, serveErr, url, client)
 			wg.Wait()
 
 			// Compare the log output.
@@ -950,16 +960,21 @@ func TestExec(t *testing.T) {
 	}
 }
 
-func waitForStart(t *testing.T, pool *x509.CertPool, listener net.Listener) {
+func makeClient(t *testing.T, pool *x509.CertPool, listener net.Listener) (string, http.Client) {
 	t.Helper()
 
 	url := fmt.Sprintf("https://%v/", listener.Addr())
-	client := http.Client{
+	return url, http.Client{
 		Timeout: 100 * time.Millisecond,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
 		},
 	}
+}
+
+func waitForStart(t *testing.T, url string, client http.Client) {
+	t.Helper()
+
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
@@ -1275,4 +1290,11 @@ func validateToken(
 	} else {
 		a.Equal(form.Get("client_id"), claims.ClientID)
 	}
+}
+
+type holdOpen struct{}
+
+func (holdOpen) Read([]byte) (int, error) {
+	time.Sleep(time.Second)
+	return 0, nil
 }
