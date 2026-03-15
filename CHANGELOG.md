@@ -9,7 +9,23 @@ All notable changes to this project will be documented in this file. It uses the
 
 ## [v0.2.3] — Unreleased
 
+🏗️ Build Setup
 
+*   Enabled all of the `vacuum` rules and integrated its repo into
+    `.pre-commit-config.yaml`.
+
+### ⬆️ Dependencies
+
+*   Upgraded to Go 1.26.1
+*   Upgraded golangci-lint to v2.11.3 and fixed issues
+*   Updated all dependencies
+
+### 📚 Documentation
+
+*   Improved [`openapi.json`](openapi.json) by adding `license` and `contact`
+    properties to the `info` object, setting just a single tag for each API,
+    and adding a 400 response to the `/openapi.json` and
+    `/.well-known/jwks.json` APIs.
 
   [v0.2.3]: https://github.com/theory/jsonpath/compare/v0.2.2...v0.2.3
 

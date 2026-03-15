@@ -37,8 +37,11 @@ cover: $(shell find . -name \*.go)
 	@$(GO) tool cover -html=cover.out
 
 .PHONY: lint # Lint the project
-lint: .golangci.yaml
+lint: .golangci.yaml openapi.json
 	@pre-commit run --show-diff-on-failure --color=always --all-files
+
+lint-openapi: openapi.json
+	@vacuum lint -d -r vacuum-ruleset.yaml --no-clip -n info $<
 
 .PHONY: clean # Remove generated files
 clean:
@@ -86,8 +89,7 @@ brew-lint-depends:
 
 .PHONY: debian-lint-depends # Install linting tools on Debian
 debian-lint-depends:
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sudo sh -s -- -b /usr/bin v2.8.0
-	curl -fsSL https://quobix.com/scripts/install_vacuum.sh | sudo sh
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sudo sh -s -- -b /usr/bin v2.11.3
 
 ## .git/hooks/pre-commit: Install the pre-commit hook
 .git/hooks/pre-commit:

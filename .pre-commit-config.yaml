@@ -33,12 +33,6 @@ repos:
         entry: golangci-lint run --fix --timeout=5m
         pass_filenames: false
         types: [go]
-      - id: openid-lint
-        name: OpenID Linting
-        language: system
-        entry: vacuum lint -d -r vacuum-ruleset.yaml -n warn
-        files: openapi.json
-        pass_filenames: true
 
   - repo: https://github.com/pre-commit/mirrors-prettier
     rev: v3.1.0
@@ -46,3 +40,12 @@ repos:
       - id: prettier
         name: JSON and YAML formatting
         types_or: [json, yaml]
+
+  - repo: https://github.com/daveshanley/vacuum
+    rev: v0.25.1
+    hooks:
+      - id: vacuum
+        name: Vacuum OpenAPI
+        entry: vacuum lint
+        args: [-d, -r, vacuum-ruleset.yaml, --no-clip, -n, info]
+        files: openapi\.json$

@@ -800,7 +800,7 @@ func TestRun(t *testing.T) {
 				)
 				require.NoError(t, err)
 				go func(client http.Client, req *http.Request) {
-					//nolint:bodyclose
+					//nolint:bodyclose,gosec // disable G704
 					_, _ = client.Do(req)
 				}(client, req)
 				time.Sleep(10 * time.Millisecond)

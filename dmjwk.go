@@ -258,6 +258,7 @@ func setupAuth(opts *Options, set *jwkset.MemoryJWKSet) http.Handler {
 		w.WriteHeader(http.StatusOK)
 		enc := json.NewEncoder(w)
 		enc.SetEscapeHTML(false)
+		//nolint:gosec // disable G117 // Yes we want to encode Token
 		err = enc.Encode(body)
 		if err != nil {
 			slog.ErrorContext(r.Context(), "cannot write response", "error", err)
@@ -312,7 +313,11 @@ func setupResource(opts *Options, set jwkset.Storage) http.Handler {
 	})
 }
 
+const maxBodySize = 1 << 20 // 1MB
+
 func checkRequest(w http.ResponseWriter, r *http.Request) bool {
+	// Limit body size.
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
 	if err := r.ParseForm(); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return sendErr(w, r, "invalid_request", err.Error())
@@ -361,6 +366,7 @@ func checkRequest(w http.ResponseWriter, r *http.Request) bool {
 
 func sendErr(w http.ResponseWriter, r *http.Request, code, msg string) bool {
 	// https://datatracker.ietf.org/doc/html/rfc6749#section-4.1.2.1
+	//nolint:gosec // disable G705 // We never pass values from requests.
 	_, err := fmt.Fprintf(w, `{"error": %q, "error_description": %q}`, code, msg)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "cannot write response", "error", err)
