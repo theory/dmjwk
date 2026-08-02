@@ -128,16 +128,16 @@ func TestMux(t *testing.T) {
 		{
 			test: "no_grant_type",
 			opts: Options{},
-			code: "invalid_request",
+			code: invalidReq,
 			msg:  "missing grant_type",
 		},
 		{
 			test: "success",
 			opts: Options{Kids: []string{"hello"}},
 			form: url.Values{
-				"grant_type": []string{"password"},
-				"username":   []string{"theory"},
-				"password":   []string{"dGhlb3J5"},
+				grantType: []string{password},
+				username:  []string{"theory"},
+				password:  []string{"dGhlb3J5"},
 			},
 		},
 		{
@@ -145,18 +145,18 @@ func TestMux(t *testing.T) {
 			opts:   Options{Kids: []string{"hello"}},
 			client: "some client",
 			form: url.Values{
-				"grant_type": []string{"password"},
-				"username":   []string{"theory"},
-				"password":   []string{"dGhlb3J5"},
+				grantType: []string{password},
+				username:  []string{"theory"},
+				password:  []string{"dGhlb3J5"},
 			},
 		},
 		{
 			test: "multiple_kids_success",
 			opts: Options{Kids: []string{"a", "b", "😀"}},
 			form: url.Values{
-				"grant_type": []string{"password"},
-				"username":   []string{"bagel"},
-				"password":   []string{"YmFnZWw"},
+				grantType: []string{password},
+				username:  []string{"bagel"},
+				password:  []string{"YmFnZWw"},
 			},
 		},
 	} {
@@ -212,12 +212,12 @@ func TestMakeJWT(t *testing.T) {
 	}{
 		{
 			test: "basic",
-			form: url.Values{"username": []string{"theory"}},
+			form: url.Values{username: []string{"theory"}},
 			opts: Options{ExpireAfter: time.Hour * 24},
 		},
 		{
 			test: "iss_and_aud",
-			form: url.Values{"username": []string{"theory"}},
+			form: url.Values{username: []string{"theory"}},
 			opts: Options{
 				ExpireAfter: time.Hour,
 				Issuer:      "me",
@@ -227,30 +227,30 @@ func TestMakeJWT(t *testing.T) {
 		{
 			test: "form_iss_and_aud",
 			form: url.Values{
-				"username": []string{"theory"},
-				"iss":      []string{"authority"},
-				"aud":      []string{"pancakes", "onions"},
+				username: []string{"theory"},
+				"iss":    []string{"authority"},
+				"aud":    []string{"pancakes", "onions"},
 			},
 			opts: Options{ExpireAfter: time.Hour},
 		},
 		{
 			test: "scope_in_form",
-			form: url.Values{"username": []string{"hello"}, "scope": []string{"hi", "bye"}},
+			form: url.Values{username: []string{"hello"}, "scope": []string{"hi", "bye"}},
 			opts: Options{ExpireAfter: time.Hour * 24},
 		},
 		{
 			test: "client_id_in_form",
-			form: url.Values{"username": []string{"hello"}, "client_id": []string{"big client"}},
+			form: url.Values{username: []string{"hello"}, "client_id": []string{"big client"}},
 			opts: Options{ExpireAfter: time.Hour * 24},
 		},
 		{
 			test: "kid_in_form",
-			form: url.Values{"username": []string{"hello"}, "kid": []string{"b"}},
+			form: url.Values{username: []string{"hello"}, "kid": []string{"b"}},
 			opts: Options{ExpireAfter: time.Hour * 24, Kids: []string{"a", "b"}},
 		},
 		{
 			test: "kid_in_options",
-			form: url.Values{"username": []string{"❤️ & 🚀"}},
+			form: url.Values{username: []string{"❤️ & 🚀"}},
 			opts: Options{
 				Issuer:      "test",
 				Audience:    []string{"everyone"},
@@ -260,7 +260,7 @@ func TestMakeJWT(t *testing.T) {
 		},
 		{
 			test: "no_expiration",
-			form: url.Values{"username": []string{"hello"}, "kid": []string{"b"}},
+			form: url.Values{username: []string{"hello"}, "kid": []string{"b"}},
 			opts: Options{Kids: []string{"a", "b"}},
 		},
 	} {
@@ -298,7 +298,7 @@ func TestSendErr(t *testing.T) {
 	}{
 		{
 			test: "basic",
-			code: "invalid_request",
+			code: invalidReq,
 			msg:  "Oops 😬",
 		},
 		{
@@ -319,7 +319,7 @@ func TestSendErr(t *testing.T) {
 
 			// Build expected response body.
 			exp, err := json.Marshal(map[string]string{
-				"error":             tc.code,
+				errKey:              tc.code,
 				"error_description": tc.msg,
 			})
 			r.NoError(err)
@@ -351,97 +351,97 @@ func TestCheckRequest(t *testing.T) {
 	}{
 		{
 			test: "no_grant_type",
-			code: "invalid_request",
+			code: invalidReq,
 			msg:  "missing grant_type",
 		},
 		{
 			test: "empty_grant_type",
-			form: url.Values{"grant_type": []string{""}},
-			code: "invalid_request",
+			form: url.Values{grantType: []string{""}},
+			code: invalidReq,
 			msg:  "missing grant_type",
 		},
 		{
 			test: "too_many_grant_type",
-			form: url.Values{"grant_type": []string{"foo", "bar"}},
-			code: "invalid_request",
+			form: url.Values{grantType: []string{"foo", "bar"}},
+			code: invalidReq,
 			msg:  "repeated grant_type parameter",
 		},
 		{
 			test: "bad_grant_type",
-			form: url.Values{"grant_type": []string{"authorization_code"}},
+			form: url.Values{grantType: []string{"authorization_code"}},
 			code: "unsupported_grant_type",
 			msg:  `grant_type must be "password"`,
 		},
 		{
 			test: "no_username",
-			form: url.Values{"grant_type": []string{"password"}},
-			code: "invalid_request",
+			form: url.Values{grantType: []string{password}},
+			code: invalidReq,
 			msg:  "missing username or password",
 		},
 		{
 			test: "empty_username",
 			form: url.Values{
-				"grant_type": []string{"password"},
-				"username":   []string{""},
+				grantType: []string{password},
+				username:  []string{""},
 			},
-			code: "invalid_request",
+			code: invalidReq,
 			msg:  "missing username or password",
 		},
 		{
 			test: "no_password",
 			form: url.Values{
-				"grant_type": []string{"password"},
-				"username":   []string{"theory"},
+				grantType: []string{password},
+				username:  []string{"theory"},
 			},
-			code: "invalid_request",
+			code: invalidReq,
 			msg:  "missing username or password",
 		},
 		{
 			test: "empty_password",
 			form: url.Values{
-				"grant_type": []string{"password"},
-				"username":   []string{"theory"},
-				"password":   []string{""},
+				grantType: []string{password},
+				username:  []string{"theory"},
+				password:  []string{""},
 			},
-			code: "invalid_request",
+			code: invalidReq,
 			msg:  "missing username or password",
 		},
 		{
 			test: "repeat_username",
 			form: url.Values{
-				"grant_type": []string{"password"},
-				"username":   []string{"x", "y"},
-				"password":   []string{"x"},
+				grantType: []string{password},
+				username:  []string{"x", "y"},
+				password:  []string{"x"},
 			},
-			code: "invalid_request",
+			code: invalidReq,
 			msg:  "repeated username or password parameter",
 		},
 		{
 			test: "repeat_password",
 			form: url.Values{
-				"grant_type": []string{"password"},
-				"username":   []string{"x"},
-				"password":   []string{"x", "y"},
+				grantType: []string{password},
+				username:  []string{"x"},
+				password:  []string{"x", "y"},
 			},
-			code: "invalid_request",
+			code: invalidReq,
 			msg:  "repeated username or password parameter",
 		},
 		{
 			test: "invalid_password",
 			form: url.Values{
-				"grant_type": []string{"password"},
-				"username":   []string{"theory"},
-				"password":   []string{"ur mom"},
+				grantType: []string{password},
+				username:  []string{"theory"},
+				password:  []string{"ur mom"},
 			},
-			code: "invalid_request",
+			code: invalidReq,
 			msg:  "incorrect password",
 		},
 		{
 			test: "success",
 			form: url.Values{
-				"grant_type": []string{"password"},
-				"username":   []string{"theory"},
-				"password":   []string{"dGhlb3J5"},
+				grantType: []string{password},
+				username:  []string{"theory"},
+				password:  []string{"dGhlb3J5"},
 			},
 		},
 	} {
@@ -455,7 +455,7 @@ func TestCheckRequest(t *testing.T) {
 				t.Context(), http.MethodPost, "/",
 				strings.NewReader(tc.form.Encode()),
 			)
-			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.Header.Set(contentType, "application/x-www-form-urlencoded")
 			w := httptest.NewRecorder()
 
 			// Execute checkRequest.
@@ -476,7 +476,7 @@ func TestCheckRequest(t *testing.T) {
 			a.Equal(http.StatusBadRequest, resp.StatusCode)
 			// Build expected response body.
 			exp, err := json.Marshal(map[string]string{
-				"error":             tc.code,
+				errKey:              tc.code,
 				"error_description": tc.msg,
 			})
 			r.NoError(err)
@@ -494,7 +494,7 @@ func TestCheckRequestParseFail(t *testing.T) {
 	req := httptest.NewRequestWithContext(
 		t.Context(), http.MethodPost, "/", nil,
 	)
-	req.Header.Set("Content-Type", "invalid media type")
+	req.Header.Set(contentType, "invalid media type")
 	w := httptest.NewRecorder()
 
 	// Make the request.
@@ -508,7 +508,7 @@ func TestCheckRequestParseFail(t *testing.T) {
 	a.Equal(http.StatusBadRequest, resp.StatusCode)
 	// Build expected response body.
 	exp, err := json.Marshal(map[string]string{
-		"error":             "invalid_request",
+		errKey:              invalidReq,
 		"error_description": "mime: expected slash after first token",
 	})
 	r.NoError(err)
@@ -528,27 +528,27 @@ func TestSetupAuth(t *testing.T) {
 	}{
 		{
 			test: "no_grant_type",
-			code: "invalid_request",
+			code: invalidReq,
 			msg:  "missing grant_type",
 		},
 		{
 			test: "unknown_kid",
 			form: url.Values{
-				"grant_type": []string{"password"},
-				"username":   []string{"theory"},
-				"password":   []string{"dGhlb3J5"},
-				"kid":        []string{"nonesuch"},
+				grantType: []string{password},
+				username:  []string{"theory"},
+				password:  []string{"dGhlb3J5"},
+				"kid":     []string{"nonesuch"},
 			},
-			code: "invalid_request",
+			code: invalidReq,
 			msg:  `key not found: kid "nonesuch"`,
 		},
 		{
 			test: "success",
 			opts: Options{ExpireAfter: time.Hour},
 			form: url.Values{
-				"grant_type": []string{"password"},
-				"username":   []string{"theory"},
-				"password":   []string{"dGhlb3J5"},
+				grantType: []string{password},
+				username:  []string{"theory"},
+				password:  []string{"dGhlb3J5"},
 			},
 		},
 		{
@@ -556,27 +556,27 @@ func TestSetupAuth(t *testing.T) {
 			opts:   Options{ExpireAfter: time.Hour},
 			client: "so basic",
 			form: url.Values{
-				"grant_type": []string{"password"},
-				"username":   []string{"theory"},
-				"password":   []string{"dGhlb3J5"},
+				grantType: []string{password},
+				username:  []string{"theory"},
+				password:  []string{"dGhlb3J5"},
 			},
 		},
 		{
 			test: "success_with_scope",
 			form: url.Values{
-				"grant_type": []string{"password"},
-				"username":   []string{"theory"},
-				"password":   []string{"dGhlb3J5"},
-				"scope":      []string{"edit", "comment"},
+				grantType: []string{password},
+				username:  []string{"theory"},
+				password:  []string{"dGhlb3J5"},
+				"scope":   []string{"edit", "comment"},
 			},
 		},
 		{
 			test: "success_with_client_id",
 			form: url.Values{
-				"grant_type": []string{"password"},
-				"username":   []string{"theory"},
-				"password":   []string{"dGhlb3J5"},
-				"client_id":  []string{"whatever"},
+				grantType:   []string{password},
+				username:    []string{"theory"},
+				password:    []string{"dGhlb3J5"},
+				"client_id": []string{"whatever"},
 			},
 		},
 	} {
@@ -617,7 +617,7 @@ func TestSetupResource(t *testing.T) {
 		{
 			test: "no_token",
 			tok:  "omit",
-			code: "invalid_request",
+			code: invalidReq,
 			msg:  "no token present in request",
 		},
 		{
@@ -637,7 +637,7 @@ func TestSetupResource(t *testing.T) {
 		},
 		{
 			test: "json_success",
-			mime: "application/json",
+			mime: responseType,
 			body: `{"go": 1}`,
 		},
 		{
@@ -710,16 +710,16 @@ func TestServer(t *testing.T) {
 		{
 			test: "no_grant_type",
 			opts: Options{},
-			code: "invalid_request",
+			code: invalidReq,
 			msg:  "missing grant_type",
 		},
 		{
 			test: "success",
 			opts: Options{},
 			form: url.Values{
-				"grant_type": []string{"password"},
-				"username":   []string{"theory"},
-				"password":   []string{"dGhlb3J5"},
+				grantType: []string{password},
+				username:  []string{"theory"},
+				password:  []string{"dGhlb3J5"},
 			},
 		},
 	} {
@@ -800,7 +800,7 @@ func TestRun(t *testing.T) {
 				)
 				require.NoError(t, err)
 				go func(client http.Client, req *http.Request) {
-					//nolint:bodyclose,gosec // disable G704
+					//nolint:bodyclose // disable G704
 					_, _ = client.Do(req)
 				}(client, req)
 				time.Sleep(10 * time.Millisecond)
@@ -1043,7 +1043,7 @@ func makeJWKsRequest(t *testing.T, handler http.Handler, set *jwkset.MemoryJWKSe
 
 	resp := w.Result()
 	a.Equal(http.StatusOK, resp.StatusCode)
-	a.Equal("application/json", resp.Header.Get("Content-Type"))
+	a.Equal(responseType, resp.Header.Get(contentType))
 	body, err := io.ReadAll(resp.Body)
 	r.NoError(err)
 	a.JSONEq(string(pub), string(body))
@@ -1065,7 +1065,7 @@ func makeOpenAPIRequest(t *testing.T, handler http.Handler) {
 
 	resp := w.Result()
 	a.Equal(http.StatusOK, resp.StatusCode)
-	a.Equal("application/json", resp.Header.Get("Content-Type"))
+	a.Equal(responseType, resp.Header.Get(contentType))
 	body, err := io.ReadAll(resp.Body)
 	r.NoError(err)
 	a.JSONEq(string(exp), string(body))
@@ -1104,7 +1104,7 @@ func makeAuthRequest(t *testing.T, tc authTest) {
 		t.Context(), http.MethodPost, "/authorization",
 		strings.NewReader(tc.form.Encode()),
 	)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set(contentType, "application/x-www-form-urlencoded")
 	if tc.client != "" {
 		req.SetBasicAuth(tc.client, "")
 	}
@@ -1112,14 +1112,14 @@ func makeAuthRequest(t *testing.T, tc authTest) {
 
 	tc.handler.ServeHTTP(w, req)
 	resp := w.Result()
-	a.Equal("application/json", resp.Header.Get("Content-Type"))
+	a.Equal(responseType, resp.Header.Get(contentType))
 
 	if tc.code != "" {
 		// Should return an error.
 		a.Equal(http.StatusBadRequest, resp.StatusCode)
 		// Build expected response body.
 		exp, err := json.Marshal(map[string]string{
-			"error":             tc.code,
+			errKey:              tc.code,
 			"error_description": tc.msg,
 		})
 		r.NoError(err)
@@ -1181,7 +1181,7 @@ func makeResourceRequest(t *testing.T, tc resourceTest) {
 		req.Header.Set("Authorization", "Bearer "+tc.tok)
 	}
 	if tc.mime != "" {
-		req.Header.Set("Content-Type", tc.mime)
+		req.Header.Set(contentType, tc.mime)
 	}
 	w := httptest.NewRecorder()
 
@@ -1191,14 +1191,14 @@ func makeResourceRequest(t *testing.T, tc resourceTest) {
 	if tc.code != "" {
 		// Should return an error.
 		a.Equal(http.StatusUnauthorized, resp.StatusCode)
-		a.Equal("application/json", resp.Header.Get("Content-Type"))
+		a.Equal(responseType, resp.Header.Get(contentType))
 		a.Equal(
 			fmt.Sprintf("Bearer error=%q error_description=%q", tc.code, tc.msg),
 			resp.Header.Get("WWW-Authenticate"),
 		)
 		// Build expected response body.
 		exp, err := json.Marshal(map[string]string{
-			"error":             tc.code,
+			errKey:              tc.code,
 			"error_description": tc.msg,
 		})
 		r.NoError(err)
@@ -1213,7 +1213,7 @@ func makeResourceRequest(t *testing.T, tc resourceTest) {
 		tc.mime = "application/octet-stream"
 	}
 	a.Equal(http.StatusOK, resp.StatusCode)
-	a.Equal(tc.mime, resp.Header.Get("Content-Type"))
+	a.Equal(tc.mime, resp.Header.Get(contentType))
 	body, err := io.ReadAll(resp.Body)
 	r.NoError(err)
 	a.Equal(tc.body, string(body))
@@ -1254,7 +1254,7 @@ func validateToken(
 
 	str, err = claims.GetSubject()
 	r.NoError(err)
-	a.Equal(form.Get("username"), str)
+	a.Equal(form.Get(username), str)
 
 	iat, err := claims.GetIssuedAt()
 	r.NoError(err)

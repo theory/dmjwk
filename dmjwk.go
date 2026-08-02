@@ -54,6 +54,18 @@ type Options struct {
 	HostNames   []string      `split_words:"true"`
 }
 
+// Various repeated string constants.
+const (
+	errKey       = "error"
+	grantType    = "grant_type"
+	username     = "username"
+	password     = "password"
+	invalidReq   = "invalid_request"
+	responseType = "application/json"
+	writeError   = "cannot write response"
+	contentType  = "Content-Type"
+)
+
 func (o *Options) dnsNames() []string {
 	hosts := []string{"localhost", "localhost4", "localhost6", "localhost.localdomain"}
 	for _, h := range o.HostNames {
@@ -66,7 +78,7 @@ func (o *Options) dnsNames() []string {
 
 func main() {
 	if msg, err := exec(os.Args[1:]); err != nil {
-		slog.Error(msg, "error", err)
+		slog.Error(msg, errKey, err)
 		const errExit = 2
 		os.Exit(errExit)
 	} else if msg != "" {
@@ -176,11 +188,11 @@ func newMux(opts *Options, set *jwkset.MemoryJWKSet) (*http.ServeMux, error) {
 	mux := http.NewServeMux()
 	// Setup and endpoint to serve the public keys JWK set.
 	mux.HandleFunc("GET /.well-known/jwks.json", func(w http.ResponseWriter, req *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(contentType, responseType)
 		w.WriteHeader(http.StatusOK)
 		_, err := w.Write(pub)
 		if err != nil {
-			slog.ErrorContext(req.Context(), "cannot write response", "error", err)
+			slog.ErrorContext(req.Context(), writeError, errKey, err)
 		}
 	})
 
@@ -192,11 +204,11 @@ func newMux(opts *Options, set *jwkset.MemoryJWKSet) (*http.ServeMux, error) {
 
 	// Setup a handler for the OpenAPI doc.
 	mux.HandleFunc("GET /openapi.json", func(w http.ResponseWriter, req *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(contentType, responseType)
 		w.WriteHeader(http.StatusOK)
 		_, err := w.Write(openapi)
 		if err != nil {
-			slog.ErrorContext(req.Context(), "cannot write response", "error", err)
+			slog.ErrorContext(req.Context(), writeError, errKey, err)
 		}
 	})
 
@@ -235,7 +247,7 @@ const tokenType = "Bearer"
 func setupAuth(opts *Options, set *jwkset.MemoryJWKSet) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// https://datatracker.ietf.org/doc/html/rfc6749#section-4.3
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(contentType, responseType)
 
 		// Validate the request.
 		if !checkRequest(w, r) {
@@ -246,7 +258,7 @@ func setupAuth(opts *Options, set *jwkset.MemoryJWKSet) http.Handler {
 		tok, err := makeJWT(r.Context(), opts, set, r)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			sendErr(w, r, "invalid_request", err.Error())
+			sendErr(w, r, invalidReq, err.Error())
 			return
 		}
 
@@ -261,7 +273,7 @@ func setupAuth(opts *Options, set *jwkset.MemoryJWKSet) http.Handler {
 		//nolint:gosec // disable G117 // Yes we want to encode Token
 		err = enc.Encode(body)
 		if err != nil {
-			slog.ErrorContext(r.Context(), "cannot write response", "error", err)
+			slog.ErrorContext(r.Context(), writeError, errKey, err)
 		}
 	})
 }
@@ -289,7 +301,7 @@ func setupResource(opts *Options, set jwkset.Storage) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		bearer, err := request.BearerExtractor{}.ExtractToken(r)
 		if err != nil {
-			sendAuthErr(w, r, "invalid_request", err)
+			sendAuthErr(w, r, invalidReq, err)
 			return
 		}
 
@@ -301,14 +313,14 @@ func setupResource(opts *Options, set jwkset.Storage) http.Handler {
 		}
 
 		// Return the response body.
-		ct := r.Header.Get("Content-Type")
+		ct := r.Header.Get(contentType)
 		if ct == "" {
 			ct = "application/octet-stream"
 		}
-		w.Header().Add("Content-Type", ct)
+		w.Header().Add(contentType, ct)
 		w.WriteHeader(http.StatusOK)
 		if _, err := io.Copy(w, r.Body); err != nil {
-			slog.ErrorContext(r.Context(), "cannot write response", "error", err)
+			slog.ErrorContext(r.Context(), writeError, errKey, err)
 		}
 	})
 }
@@ -320,45 +332,45 @@ func checkRequest(w http.ResponseWriter, r *http.Request) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
 	if err := r.ParseForm(); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		return sendErr(w, r, "invalid_request", err.Error())
+		return sendErr(w, r, invalidReq, err.Error())
 	}
 
 	// Inspect the request.
 	// https://datatracker.ietf.org/doc/html/rfc6749#section-5.2
-	if r.Form.Get("grant_type") == "" {
+	if r.Form.Get(grantType) == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		return sendErr(w, r, "invalid_request", "missing grant_type")
+		return sendErr(w, r, invalidReq, "missing grant_type")
 	}
 
 	// https://datatracker.ietf.org/doc/html/rfc6749#section-5.2
-	if len(r.Form["grant_type"]) > 1 {
+	if len(r.Form[grantType]) > 1 {
 		w.WriteHeader(http.StatusBadRequest)
-		return sendErr(w, r, "invalid_request", "repeated grant_type parameter")
+		return sendErr(w, r, invalidReq, "repeated grant_type parameter")
 	}
 
 	// https://datatracker.ietf.org/doc/html/rfc6749#section-4.3.2
-	if r.Form.Get("grant_type") != "password" {
+	if r.Form.Get(grantType) != password {
 		w.WriteHeader(http.StatusBadRequest)
 		return sendErr(w, r, "unsupported_grant_type", `grant_type must be "password"`)
 	}
 
 	// https://datatracker.ietf.org/doc/html/rfc6749#section-5.2
-	if r.Form.Get("username") == "" || r.Form.Get("password") == "" {
+	if r.Form.Get(username) == "" || r.Form.Get(password) == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		return sendErr(w, r, "invalid_request", "missing username or password")
+		return sendErr(w, r, invalidReq, "missing username or password")
 	}
 
 	// https://datatracker.ietf.org/doc/html/rfc6749#section-5.2
-	if len(r.Form["username"]) > 1 || len(r.Form["password"]) > 1 {
+	if len(r.Form[username]) > 1 || len(r.Form[password]) > 1 {
 		w.WriteHeader(http.StatusBadRequest)
-		return sendErr(w, r, "invalid_request", "repeated username or password parameter")
+		return sendErr(w, r, invalidReq, "repeated username or password parameter")
 	}
 
 	// Authentication succeeds when password equal to base64 username.
-	pass := base64.RawStdEncoding.EncodeToString([]byte(r.Form.Get("username")))
-	if r.Form.Get("password") != pass {
+	pass := base64.RawStdEncoding.EncodeToString([]byte(r.Form.Get(username)))
+	if r.Form.Get(password) != pass {
 		w.WriteHeader(http.StatusBadRequest)
-		return sendErr(w, r, "invalid_request", "incorrect password")
+		return sendErr(w, r, invalidReq, "incorrect password")
 	}
 
 	return true
@@ -369,19 +381,19 @@ func sendErr(w http.ResponseWriter, r *http.Request, code, msg string) bool {
 	//nolint:gosec // disable G705 // We never pass values from requests.
 	_, err := fmt.Fprintf(w, `{"error": %q, "error_description": %q}`, code, msg)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "cannot write response", "error", err)
+		slog.ErrorContext(r.Context(), writeError, errKey, err)
 	}
 	return false
 }
 
 func sendAuthErr(w http.ResponseWriter, r *http.Request, msg string, authErr error) {
 	// https://datatracker.ietf.org/doc/html/rfc6750#section-3
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(contentType, responseType)
 	w.Header().Add("WWW-Authenticate", fmt.Sprintf("Bearer error=%q error_description=%q", msg, authErr))
 	w.WriteHeader(http.StatusUnauthorized)
 	_, err := fmt.Fprintf(w, `{"error": %q, "error_description": %q}`, msg, authErr)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "cannot write response", "error", err)
+		slog.ErrorContext(r.Context(), writeError, errKey, err)
 	}
 }
 
@@ -414,7 +426,7 @@ func makeJWT(ctx context.Context, opts *Options, set *jwkset.MemoryJWKSet, req *
 	claims := rfc8693Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:   form.Get("iss"),
-			Subject:  form.Get("username"),
+			Subject:  form.Get(username),
 			IssuedAt: jwt.NewNumericDate(now),
 			ID:       randID(),
 		},
@@ -479,14 +491,14 @@ func run(
 		// Shutdown with the timeout to wait for requests to finish.
 		srv.SetKeepAlivesEnabled(false)
 		if err := srv.Shutdown(ctx); err != nil {
-			logger.Error("server shutdown failed", "error", err)
+			logger.Error("server shutdown failed", errKey, err)
 			return "server shutdown failed", err
 		}
 
 		logger.Info("server shut down")
 	case err := <-serveErr:
 		if err != nil {
-			logger.Error("server failed", "error", err)
+			logger.Error("server failed", errKey, err)
 			return "server failed", err
 		}
 	}

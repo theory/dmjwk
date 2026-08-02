@@ -17,6 +17,7 @@ linters:
     - wrapcheck # don't care for this simple app
     - wsl
     - wsl_v5
+    - gomodguard # deprecated in favor of gomodguard_v2
   exclusions:
     generated: lax
     rules:
@@ -40,3 +41,5 @@ linters:
       case:
         rules:
           json: snake
+    goconst:
+      ignore-tests: true

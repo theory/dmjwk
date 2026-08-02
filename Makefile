@@ -89,7 +89,7 @@ brew-lint-depends:
 
 .PHONY: debian-lint-depends # Install linting tools on Debian
 debian-lint-depends:
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sudo sh -s -- -b /usr/bin v2.11.3
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/main/install.sh | sudo sh -s -- -b /usr/bin v2.12.2
 
 ## .git/hooks/pre-commit: Install the pre-commit hook
 .git/hooks/pre-commit:
